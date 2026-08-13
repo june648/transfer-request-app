@@ -13,8 +13,8 @@ import {
   updateTransferRequest,
   fetchLineItems,
   createLineItems,
-  deleteLineItem,
-  updateLineItem as updateLineItemApi,
+  deleteLineItems,
+  updateLineItems,
   searchProducts,
 } from "@/lib/airtable";
 
@@ -260,31 +260,41 @@ export default function EditTransferModal({
         status,
       });
 
-      // Collect all items across groups for save operations
+      // Collect deletes and updates across all groups, then send them
+      // as batched requests (10 records per API call)
+      const idsToDelete: string[] = [];
+      const itemUpdates: {
+        id: string;
+        from: string;
+        to: string;
+        asin: string;
+        productDescription: string;
+        quantity: number;
+      }[] = [];
+
       for (const group of groups) {
-        // Delete removed items
-        const deletedItems = group.items.filter(
-          (i) => i.isDeleted && i.id
-        );
-        for (const item of deletedItems) {
-          await deleteLineItem(item.id!);
+        for (const item of group.items) {
+          if (item.isDeleted && item.id) {
+            idsToDelete.push(item.id);
+          } else if (item.id && !item.isNew) {
+            // Include from/to in case group changed
+            itemUpdates.push({
+              id: item.id,
+              from: group.from,
+              to: group.to,
+              asin: item.asin,
+              productDescription: item.productDescription,
+              quantity: item.quantity,
+            });
+          }
         }
+      }
 
-        // Update existing items (include from/to in case group changed)
-        const existingItems = group.items.filter(
-          (i) => i.id && !i.isDeleted && !i.isNew
-        );
-        for (const item of existingItems) {
-          await updateLineItemApi(item.id!, {
-            from: group.from,
-            to: group.to,
-            asin: item.asin,
-            productDescription: item.productDescription,
-            quantity: item.quantity,
-          });
-        }
+      await deleteLineItems(idsToDelete);
+      await updateLineItems(itemUpdates);
 
-        // Create new items
+      // Create new items (per group, so each keeps its from/to)
+      for (const group of groups) {
         const newItems = group.items.filter(
           (i) => i.isNew && !i.isDeleted && i.asin.trim()
         );

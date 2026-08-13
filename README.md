@@ -4,7 +4,7 @@ A supply chain management tool for creating, tracking, and managing inventory tr
 
 ## Features
 
-- **Transfer Requests** — Create and manage transfer requests with auto-generated IDs (e.g. `TR-20260407-001`)
+- **Transfer Requests** — Create and manage transfer requests with auto-generated IDs (e.g. `TR-20260525`; same-day collisions fall back to `TR-20260525-002`, `-003`, …)
 - **Status Tracking** — Track requests through a workflow: Draft → Submitted → In Transit → Received → Cancelled
 - **Line Items** — Add products to each transfer with ASIN, description, and quantity
 - **Product Catalog Search** — Look up products by ASIN or name from a shared Airtable catalog

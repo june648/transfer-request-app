@@ -53,6 +53,36 @@ function setTableCache(cache: TableCache) {
   localStorage.setItem(STORAGE_KEYS.tableCache, JSON.stringify(cache));
 }
 
+// Retries transient failures: network drops ("Failed to fetch"),
+// Airtable rate limits (429), and server errors (5xx).
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  let lastError: Error = new Error("Network error");
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+        // 429 = rate limited; Airtable enforces a cooldown, so back off hard
+        const base = res.status === 429 ? 2000 : 500;
+        await new Promise((r) => setTimeout(r, base * 2 ** attempt));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err as Error;
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      }
+    }
+  }
+  throw new Error(
+    `Network error while contacting Airtable (${lastError.message}). Check your internet connection and try again.`
+  );
+}
+
 async function airtableFetch(
   baseId: string,
   path: string,
@@ -62,7 +92,7 @@ async function airtableFetch(
   if (!token) throw new Error("Airtable PAT not configured");
 
   const url = `https://api.airtable.com/v0/${baseId}/${path}`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -83,7 +113,7 @@ async function airtableFetch(
 async function metaFetch(path: string, options: RequestInit = {}) {
   const { token } = getConfig();
   const url = `https://api.airtable.com/v0/meta/${path}`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -284,18 +314,20 @@ export async function generateTransferRequestId(): Promise<string> {
     today.getFullYear().toString() +
     (today.getMonth() + 1).toString().padStart(2, "0") +
     today.getDate().toString().padStart(2, "0");
-  const prefix = `TR-${dateStr}-`;
+  const baseId = `TR-${dateStr}`;
 
   const existing = await fetchTransferRequests();
-  const todayIds = existing
-    .filter((r) => r.transferRequestId.startsWith(prefix))
-    .map((r) => {
-      const num = parseInt(r.transferRequestId.replace(prefix, ""), 10);
-      return isNaN(num) ? 0 : num;
-    });
+  const taken = new Set(
+    existing
+      .map((r) => r.transferRequestId)
+      .filter((id) => id === baseId || id.startsWith(`${baseId}-`))
+  );
 
-  const nextNum = todayIds.length > 0 ? Math.max(...todayIds) + 1 : 1;
-  return `${prefix}${nextNum.toString().padStart(3, "0")}`;
+  if (!taken.has(baseId)) return baseId;
+
+  let n = 2;
+  while (taken.has(`${baseId}-${n.toString().padStart(3, "0")}`)) n++;
+  return `${baseId}-${n.toString().padStart(3, "0")}`;
 }
 
 export async function createTransferRequest(data: {
@@ -480,6 +512,58 @@ export async function updateLineItem(
   return mapLineItem(result);
 }
 
+export async function updateLineItems(
+  updates: {
+    id: string;
+    from: string;
+    to: string;
+    asin: string;
+    productDescription: string;
+    quantity: number;
+  }[]
+): Promise<void> {
+  if (updates.length === 0) return;
+  const { baseId } = getConfig();
+  const { lineItemsTable } = await ensureTables();
+
+  // Batch in groups of 10
+  for (let i = 0; i < updates.length; i += 10) {
+    const batch = updates.slice(i, i + 10);
+    await airtableFetch(baseId, encodeURIComponent(lineItemsTable), {
+      method: "PATCH",
+      body: JSON.stringify({
+        records: batch.map((u) => ({
+          id: u.id,
+          fields: {
+            From: u.from,
+            To: u.to,
+            ASIN: u.asin,
+            Product_Description: u.productDescription,
+            Quantity: u.quantity,
+          },
+        })),
+      }),
+    });
+  }
+}
+
+export async function deleteLineItems(recordIds: string[]): Promise<void> {
+  if (recordIds.length === 0) return;
+  const { baseId } = getConfig();
+  const { lineItemsTable } = await ensureTables();
+
+  // Batch in groups of 10
+  for (let i = 0; i < recordIds.length; i += 10) {
+    const batch = recordIds.slice(i, i + 10);
+    const params = batch.map((id) => `records[]=${id}`).join("&");
+    await airtableFetch(
+      baseId,
+      `${encodeURIComponent(lineItemsTable)}?${params}`,
+      { method: "DELETE" }
+    );
+  }
+}
+
 export async function deleteLineItem(recordId: string): Promise<void> {
   const { baseId } = getConfig();
   const { lineItemsTable } = await ensureTables();
@@ -494,17 +578,7 @@ export async function deleteLineItemsByTransfer(
   transferRequestId: string
 ): Promise<void> {
   const items = await fetchLineItems(transferRequestId);
-  for (let i = 0; i < items.length; i += 10) {
-    const batch = items.slice(i, i + 10);
-    const { baseId } = getConfig();
-    const { lineItemsTable } = await ensureTables();
-    const params = batch.map((item) => `records[]=${item.id}`).join("&");
-    await airtableFetch(
-      baseId,
-      `${encodeURIComponent(lineItemsTable)}?${params}`,
-      { method: "DELETE" }
-    );
-  }
+  await deleteLineItems(items.map((item) => item.id));
 }
 
 // --- Products Catalog (cross-base) ---
