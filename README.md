@@ -38,7 +38,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3700](http://localhost:3700) in your browser.
 
 ### Production Build
 
@@ -46,6 +46,10 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 npm run build
 npm start
 ```
+
+## Deployment
+
+Production runs at [transfer-request-app-three.vercel.app](https://transfer-request-app-three.vercel.app) and deploys automatically whenever `master` is pushed to GitHub (Vercel Git integration).
 
 ## Configuration
 
