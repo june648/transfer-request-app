@@ -67,10 +67,16 @@ export interface EditableLineItem {
   isDeleted?: boolean;
 }
 
+export type NoteStatus = "Open" | "In Progress" | "Resolved";
+
+export const NOTE_STATUSES: NoteStatus[] = ["Open", "In Progress", "Resolved"];
+
 export interface AsinNote {
   id: string;
   asin: string;
   productName: string;
   note: string;
+  status: NoteStatus;
+  francesFeedback: string;
   createdDate: string;
 }

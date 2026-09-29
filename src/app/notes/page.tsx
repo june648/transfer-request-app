@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { AsinNote, Product } from "@/types/transfer";
+import { AsinNote, NoteStatus, NOTE_STATUSES, Product } from "@/types/transfer";
 import {
   isConfigured,
   fetchAsinNotes,
   createAsinNote,
+  updateAsinNote,
   deleteAsinNote,
   searchProducts,
 } from "@/lib/airtable";
@@ -23,6 +24,12 @@ function formatDate(iso: string) {
   });
 }
 
+const STATUS_COLORS: Record<NoteStatus, { bg: string; fg: string }> = {
+  Open: { bg: "var(--primary-light)", fg: "var(--primary)" },
+  "In Progress": { bg: "var(--warning-light)", fg: "#9a6b00" },
+  Resolved: { bg: "var(--success-light)", fg: "var(--success)" },
+};
+
 export default function NotesPage() {
   const [notes, setNotes] = useState<AsinNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +41,7 @@ export default function NotesPage() {
   const [asin, setAsin] = useState("");
   const [productName, setProductName] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [newStatus, setNewStatus] = useState<NoteStatus>("Open");
   const [saving, setSaving] = useState(false);
 
   // ASIN autocomplete
@@ -42,6 +50,12 @@ export default function NotesPage() {
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState<NoteStatus | "All">("All");
+
+  // Frances feedback being edited (one row at a time)
+  const [feedbackEditId, setFeedbackEditId] = useState<string | null>(null);
+  const [feedbackDraft, setFeedbackDraft] = useState("");
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
 
   const loadNotes = useCallback(async () => {
     setLoading(true);
@@ -98,15 +112,47 @@ export default function NotesPage() {
         asin: asin.trim().toUpperCase(),
         productName,
         note: noteText.trim(),
+        status: newStatus,
       });
       setAsin("");
       setProductName("");
       setNoteText("");
+      setNewStatus("Open");
       loadNotes();
     } catch (err) {
       alert("Could not save the note: " + (err as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const replaceNote = (updated: AsinNote) =>
+    setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+
+  const handleStatusChange = async (note: AsinNote, status: NoteStatus) => {
+    try {
+      replaceNote(await updateAsinNote(note.id, { status }));
+    } catch (err) {
+      alert("Could not change the status: " + (err as Error).message);
+    }
+  };
+
+  const startFeedbackEdit = (note: AsinNote) => {
+    setFeedbackEditId(note.id);
+    setFeedbackDraft(note.francesFeedback);
+  };
+
+  const saveFeedback = async (note: AsinNote) => {
+    setFeedbackSaving(true);
+    try {
+      replaceNote(
+        await updateAsinNote(note.id, { francesFeedback: feedbackDraft.trim() })
+      );
+      setFeedbackEditId(null);
+    } catch (err) {
+      alert("Could not save the feedback: " + (err as Error).message);
+    } finally {
+      setFeedbackSaving(false);
     }
   };
 
@@ -123,10 +169,12 @@ export default function NotesPage() {
   const q = searchText.trim().toLowerCase();
   const filtered = notes.filter(
     (n) =>
-      !q ||
-      n.asin.toLowerCase().includes(q) ||
-      n.productName.toLowerCase().includes(q) ||
-      n.note.toLowerCase().includes(q)
+      (statusFilter === "All" || n.status === statusFilter) &&
+      (!q ||
+        n.asin.toLowerCase().includes(q) ||
+        n.productName.toLowerCase().includes(q) ||
+        n.note.toLowerCase().includes(q) ||
+        n.francesFeedback.toLowerCase().includes(q))
   );
 
   const card = {
@@ -203,6 +251,20 @@ export default function NotesPage() {
                     style={{ resize: "vertical" }}
                   />
                 </div>
+                <div className="form-group" style={{ width: 150 }}>
+                  <label className="form-label">Status</label>
+                  <select
+                    className="form-input"
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as NoteStatus)}
+                  >
+                    {NOTE_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
                 <button
@@ -220,10 +282,23 @@ export default function NotesPage() {
               <input
                 className="form-input"
                 style={{ flex: 1, minWidth: 200 }}
-                placeholder="Search by ASIN, product, or note text..."
+                placeholder="Search by ASIN, product, note, or feedback..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
+              <select
+                className="form-input"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as NoteStatus | "All")}
+                style={{ width: 160 }}
+              >
+                <option value="All">All Statuses</option>
+                {NOTE_STATUSES.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
               {searchText && (
                 <button className="btn btn-outline" onClick={() => setSearchText("")}>
                   Clear
@@ -250,14 +325,14 @@ export default function NotesPage() {
             )}
 
             {/* Notes list */}
-            <div style={{ ...card, overflow: "hidden" }}>
+            <div style={{ ...card, overflowX: "auto" }}>
               {loading && notes.length === 0 ? (
                 <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--gray-400)" }}>
                   Loading notes...
                 </div>
               ) : filtered.length === 0 ? (
                 <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--gray-400)" }}>
-                  {notes.length === 0 ? "No notes yet. Add the first one above." : "No notes match your search."}
+                  {notes.length === 0 ? "No notes yet. Add the first one above." : "No notes match your search or filter."}
                 </div>
               ) : (
                 <table className="data-table">
@@ -266,6 +341,8 @@ export default function NotesPage() {
                       <th style={{ width: 170 }}>Date</th>
                       <th style={{ width: 220 }}>ASIN</th>
                       <th>Note</th>
+                      <th style={{ width: 140 }}>Status</th>
+                      <th>Frances Feedback</th>
                       <th style={{ width: 60 }}></th>
                     </tr>
                   </thead>
@@ -298,6 +375,76 @@ export default function NotesPage() {
                           )}
                         </td>
                         <td style={{ whiteSpace: "pre-wrap", verticalAlign: "top" }}>{n.note}</td>
+                        <td style={{ verticalAlign: "top" }}>
+                          <select
+                            className="form-input"
+                            value={n.status}
+                            onChange={(e) => handleStatusChange(n, e.target.value as NoteStatus)}
+                            style={{
+                              padding: "4px 8px",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              background: STATUS_COLORS[n.status].bg,
+                              color: STATUS_COLORS[n.status].fg,
+                              border: "none",
+                            }}
+                          >
+                            {NOTE_STATUSES.map((st) => (
+                              <option key={st} value={st}>
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ verticalAlign: "top" }}>
+                          {feedbackEditId === n.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              <textarea
+                                className="form-input"
+                                rows={3}
+                                autoFocus
+                                value={feedbackDraft}
+                                onChange={(e) => setFeedbackDraft(e.target.value)}
+                                placeholder="Frances's feedback..."
+                                style={{ resize: "vertical" }}
+                              />
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => saveFeedback(n)}
+                                  disabled={feedbackSaving}
+                                >
+                                  {feedbackSaving ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline"
+                                  onClick={() => setFeedbackEditId(null)}
+                                  disabled={feedbackSaving}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : n.francesFeedback ? (
+                            <div>
+                              <div style={{ whiteSpace: "pre-wrap" }}>{n.francesFeedback}</div>
+                              <button
+                                className="btn btn-sm btn-outline"
+                                onClick={() => startFeedbackEdit(n)}
+                                style={{ marginTop: 6 }}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="btn btn-sm btn-outline"
+                              onClick={() => startFeedbackEdit(n)}
+                            >
+                              + Add feedback
+                            </button>
+                          )}
+                        </td>
                         <td style={{ verticalAlign: "top" }}>
                           <button
                             className="btn btn-sm btn-outline"

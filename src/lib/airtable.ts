@@ -6,6 +6,7 @@ import {
   LineItemDraft,
   WarehouseGroup,
   AsinNote,
+  NoteStatus,
 } from "@/types/transfer";
 
 const STORAGE_KEYS = {
@@ -20,7 +21,9 @@ const PRODUCTS_TABLE_ID = "tblLixRBZkc3IViAG";
 interface TableCache {
   transferRequests?: string;
   transferLineItems?: string;
-  asinNotes?: string;
+  // Bumped from `asinNotes` when Status/Frances_Feedback were added, so
+  // browsers that cached the old table re-check for the new fields.
+  asinNotesV2?: string;
 }
 
 export function getConfig() {
@@ -586,9 +589,23 @@ export async function deleteLineItemsByTransfer(
 
 // --- ASIN Notes ---
 
+const NOTE_STATUS_FIELD = {
+  name: "Status",
+  type: "singleSelect",
+  options: {
+    choices: [
+      { name: "Open", color: "blueLight2" },
+      { name: "In Progress", color: "yellowLight2" },
+      { name: "Resolved", color: "greenLight2" },
+    ],
+  },
+};
+
+const NOTE_FEEDBACK_FIELD = { name: "Frances_Feedback", type: "multilineText" };
+
 async function ensureNotesTable(): Promise<string> {
   const cache = getTableCache();
-  if (cache.asinNotes) return cache.asinNotes;
+  if (cache.asinNotesV2) return cache.asinNotesV2;
 
   const { baseId } = getConfig();
   const { tables } = await metaFetch(`bases/${baseId}/tables`);
@@ -603,6 +620,8 @@ async function ensureNotesTable(): Promise<string> {
           { name: "ASIN", type: "singleLineText" },
           { name: "Product_Name", type: "singleLineText" },
           { name: "Note", type: "multilineText" },
+          NOTE_STATUS_FIELD,
+          NOTE_FEEDBACK_FIELD,
           {
             name: "Created_Date",
             type: "dateTime",
@@ -615,10 +634,23 @@ async function ensureNotesTable(): Promise<string> {
         ],
       }),
     });
+  } else {
+    // Add fields introduced after the table was first created
+    const existingFieldNames = (table.fields || []).map(
+      (f: { name: string }) => f.name
+    );
+    for (const field of [NOTE_STATUS_FIELD, NOTE_FEEDBACK_FIELD]) {
+      if (!existingFieldNames.includes(field.name)) {
+        await metaFetch(`bases/${baseId}/tables/${table.id}/fields`, {
+          method: "POST",
+          body: JSON.stringify(field),
+        });
+      }
+    }
   }
 
   const tableId = table.id || table.name;
-  setTableCache({ ...getTableCache(), asinNotes: tableId });
+  setTableCache({ ...getTableCache(), asinNotesV2: tableId });
   return tableId;
 }
 
@@ -632,6 +664,8 @@ function mapAsinNote(record: {
     asin: (f["ASIN"] as string) || "",
     productName: (f["Product_Name"] as string) || "",
     note: (f["Note"] as string) || "",
+    status: (f["Status"] as NoteStatus) || "Open",
+    francesFeedback: (f["Frances_Feedback"] as string) || "",
     createdDate: (f["Created_Date"] as string) || "",
   };
 }
@@ -663,6 +697,7 @@ export async function createAsinNote(data: {
   asin: string;
   productName: string;
   note: string;
+  status: NoteStatus;
 }): Promise<AsinNote> {
   const { baseId } = getConfig();
   const notesTable = await ensureNotesTable();
@@ -674,10 +709,31 @@ export async function createAsinNote(data: {
         ASIN: data.asin,
         Product_Name: data.productName,
         Note: data.note,
+        Status: data.status,
         Created_Date: new Date().toISOString(),
       },
     }),
   });
+  return mapAsinNote(result);
+}
+
+export async function updateAsinNote(
+  recordId: string,
+  fields: Partial<{ status: NoteStatus; francesFeedback: string }>
+): Promise<AsinNote> {
+  const { baseId } = getConfig();
+  const notesTable = await ensureNotesTable();
+
+  const airtableFields: Record<string, unknown> = {};
+  if (fields.status !== undefined) airtableFields["Status"] = fields.status;
+  if (fields.francesFeedback !== undefined)
+    airtableFields["Frances_Feedback"] = fields.francesFeedback;
+
+  const result = await airtableFetch(
+    baseId,
+    `${encodeURIComponent(notesTable)}/${recordId}`,
+    { method: "PATCH", body: JSON.stringify({ fields: airtableFields }) }
+  );
   return mapAsinNote(result);
 }
 
