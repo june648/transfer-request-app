@@ -66,3 +66,11 @@ export interface EditableLineItem {
   isNew?: boolean;
   isDeleted?: boolean;
 }
+
+export interface AsinNote {
+  id: string;
+  asin: string;
+  productName: string;
+  note: string;
+  createdDate: string;
+}

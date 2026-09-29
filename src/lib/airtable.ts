@@ -5,6 +5,7 @@ import {
   TransferStatus,
   LineItemDraft,
   WarehouseGroup,
+  AsinNote,
 } from "@/types/transfer";
 
 const STORAGE_KEYS = {
@@ -19,6 +20,7 @@ const PRODUCTS_TABLE_ID = "tblLixRBZkc3IViAG";
 interface TableCache {
   transferRequests?: string;
   transferLineItems?: string;
+  asinNotes?: string;
 }
 
 export function getConfig() {
@@ -239,6 +241,7 @@ async function ensureTables(): Promise<{
   }
 
   const newCache: TableCache = {
+    ...cache,
     transferRequests: requestsTable.id || requestsTable.name,
     transferLineItems: lineItemsTable.id || lineItemsTable.name,
   };
@@ -579,6 +582,113 @@ export async function deleteLineItemsByTransfer(
 ): Promise<void> {
   const items = await fetchLineItems(transferRequestId);
   await deleteLineItems(items.map((item) => item.id));
+}
+
+// --- ASIN Notes ---
+
+async function ensureNotesTable(): Promise<string> {
+  const cache = getTableCache();
+  if (cache.asinNotes) return cache.asinNotes;
+
+  const { baseId } = getConfig();
+  const { tables } = await metaFetch(`bases/${baseId}/tables`);
+  let table = tables.find((t: { name: string }) => t.name === "ASIN_Notes");
+
+  if (!table) {
+    table = await metaFetch(`bases/${baseId}/tables`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: "ASIN_Notes",
+        fields: [
+          { name: "ASIN", type: "singleLineText" },
+          { name: "Product_Name", type: "singleLineText" },
+          { name: "Note", type: "multilineText" },
+          {
+            name: "Created_Date",
+            type: "dateTime",
+            options: {
+              timeZone: "America/Los_Angeles",
+              dateFormat: { name: "iso" },
+              timeFormat: { name: "24hour" },
+            },
+          },
+        ],
+      }),
+    });
+  }
+
+  const tableId = table.id || table.name;
+  setTableCache({ ...getTableCache(), asinNotes: tableId });
+  return tableId;
+}
+
+function mapAsinNote(record: {
+  id: string;
+  fields: Record<string, unknown>;
+}): AsinNote {
+  const f = record.fields;
+  return {
+    id: record.id,
+    asin: (f["ASIN"] as string) || "",
+    productName: (f["Product_Name"] as string) || "",
+    note: (f["Note"] as string) || "",
+    createdDate: (f["Created_Date"] as string) || "",
+  };
+}
+
+export async function fetchAsinNotes(): Promise<AsinNote[]> {
+  const { baseId } = getConfig();
+  const notesTable = await ensureNotesTable();
+  const allRecords: AsinNote[] = [];
+  let offset: string | undefined;
+
+  do {
+    const params = new URLSearchParams();
+    params.set("sort[0][field]", "Created_Date");
+    params.set("sort[0][direction]", "desc");
+    if (offset) params.set("offset", offset);
+
+    const data = await airtableFetch(
+      baseId,
+      `${encodeURIComponent(notesTable)}?${params.toString()}`
+    );
+    allRecords.push(...data.records.map(mapAsinNote));
+    offset = data.offset;
+  } while (offset);
+
+  return allRecords;
+}
+
+export async function createAsinNote(data: {
+  asin: string;
+  productName: string;
+  note: string;
+}): Promise<AsinNote> {
+  const { baseId } = getConfig();
+  const notesTable = await ensureNotesTable();
+
+  const result = await airtableFetch(baseId, encodeURIComponent(notesTable), {
+    method: "POST",
+    body: JSON.stringify({
+      fields: {
+        ASIN: data.asin,
+        Product_Name: data.productName,
+        Note: data.note,
+        Created_Date: new Date().toISOString(),
+      },
+    }),
+  });
+  return mapAsinNote(result);
+}
+
+export async function deleteAsinNote(recordId: string): Promise<void> {
+  const { baseId } = getConfig();
+  const notesTable = await ensureNotesTable();
+  await airtableFetch(
+    baseId,
+    `${encodeURIComponent(notesTable)}/${recordId}`,
+    { method: "DELETE" }
+  );
 }
 
 // --- Products Catalog (cross-base) ---

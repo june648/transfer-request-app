@@ -10,6 +10,7 @@ A supply chain management tool for creating, tracking, and managing inventory tr
 - **Product Catalog Search** — Look up products by ASIN or name from a shared Airtable catalog
 - **Filtering & Search** — Filter transfers by status or search by ID, location, and description
 - **Dashboard Summary** — View transfer counts by status at a glance
+- **ASIN Notes** — A shared log of notes per ASIN (`/notes`), searchable by ASIN, product, or note text
 
 ## Tech Stack
 
@@ -58,7 +59,7 @@ On first launch, click **Open Settings** to configure:
 1. **Airtable Personal Access Token** — Generate one at [airtable.com/create/tokens](https://airtable.com/create/tokens) with read/write access to your base and the metadata API.
 2. **Airtable Base ID** — Found in your Airtable base URL (`https://airtable.com/<BASE_ID>/...`).
 
-Configuration is stored in your browser's `localStorage`. The required tables (`Transfer_Requests` and `Transfer_Line_Items`) are automatically created in your Airtable base if they don't already exist.
+Configuration is stored in your browser's `localStorage`. The required tables (`Transfer_Requests`, `Transfer_Line_Items`, and `ASIN_Notes`) are automatically created in your Airtable base if they don't already exist.
 
 ## Project Structure
 
@@ -67,7 +68,8 @@ src/
 ├── app/
 │   ├── globals.css        # Global styles and CSS variables
 │   ├── layout.tsx         # Root layout
-│   └── page.tsx           # Main page (dashboard, filters, table)
+│   ├── page.tsx           # Main page (dashboard, filters, table)
+│   └── notes/page.tsx     # ASIN Notes log
 ├── components/
 │   ├── CreateTransferModal.tsx   # New transfer request form
 │   ├── EditTransferModal.tsx     # Edit transfer and manage line items
