@@ -52,6 +52,12 @@ export default function NotesPage() {
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState<NoteStatus | "All">("All");
 
+  // Note being edited (one row at a time)
+  const [noteEditId, setNoteEditId] = useState<string | null>(null);
+  const [asinDraft, setAsinDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+
   // Frances feedback being edited (one row at a time)
   const [feedbackEditId, setFeedbackEditId] = useState<string | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState("");
@@ -134,6 +140,36 @@ export default function NotesPage() {
       replaceNote(await updateAsinNote(note.id, { status }));
     } catch (err) {
       alert("Could not change the status: " + (err as Error).message);
+    }
+  };
+
+  const startNoteEdit = (note: AsinNote) => {
+    setNoteEditId(note.id);
+    setAsinDraft(note.asin);
+    setNoteDraft(note.note);
+  };
+
+  const saveNoteEdit = async (note: AsinNote) => {
+    const newAsin = asinDraft.trim().toUpperCase();
+    if (!newAsin || !noteDraft.trim()) {
+      alert("ASIN and note can't be empty.");
+      return;
+    }
+    setNoteSaving(true);
+    try {
+      replaceNote(
+        await updateAsinNote(note.id, {
+          asin: newAsin,
+          // Product name belonged to the old ASIN; drop it if the ASIN changed
+          productName: newAsin === note.asin ? note.productName : "",
+          note: noteDraft.trim(),
+        })
+      );
+      setNoteEditId(null);
+    } catch (err) {
+      alert("Could not save your changes: " + (err as Error).message);
+    } finally {
+      setNoteSaving(false);
     }
   };
 
@@ -343,7 +379,7 @@ export default function NotesPage() {
                       <th>Note</th>
                       <th style={{ width: 140 }}>Status</th>
                       <th>Frances Feedback</th>
-                      <th style={{ width: 60 }}></th>
+                      <th style={{ width: 80 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -353,28 +389,52 @@ export default function NotesPage() {
                           {formatDate(n.createdDate)}
                         </td>
                         <td style={{ verticalAlign: "top" }}>
-                          <button
-                            onClick={() => setSearchText(n.asin)}
-                            title="Show all notes for this ASIN"
-                            style={{
-                              background: "none",
-                              border: "none",
-                              padding: 0,
-                              cursor: "pointer",
-                              fontWeight: 600,
-                              color: "var(--primary)",
-                              fontSize: 14,
-                            }}
-                          >
-                            {n.asin}
-                          </button>
-                          {n.productName && (
-                            <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                              {n.productName}
-                            </div>
+                          {noteEditId === n.id ? (
+                            <input
+                              className="form-input"
+                              style={{ width: "100%" }}
+                              value={asinDraft}
+                              onChange={(e) => setAsinDraft(e.target.value)}
+                            />
+                          ) : (
+                            <>
+                            <button
+                              onClick={() => setSearchText(n.asin)}
+                              title="Show all notes for this ASIN"
+                              style={{
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                color: "var(--primary)",
+                                fontSize: 14,
+                              }}
+                            >
+                              {n.asin}
+                            </button>
+                            {n.productName && (
+                              <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                                {n.productName}
+                              </div>
+                            )}
+                            </>
                           )}
                         </td>
-                        <td style={{ whiteSpace: "pre-wrap", verticalAlign: "top" }}>{n.note}</td>
+                        <td style={{ whiteSpace: "pre-wrap", verticalAlign: "top" }}>
+                          {noteEditId === n.id ? (
+                            <textarea
+                              className="form-input"
+                              rows={4}
+                              autoFocus
+                              value={noteDraft}
+                              onChange={(e) => setNoteDraft(e.target.value)}
+                              style={{ width: "100%", resize: "vertical" }}
+                            />
+                          ) : (
+                            n.note
+                          )}
+                        </td>
                         <td style={{ verticalAlign: "top" }}>
                           <select
                             className="form-input"
@@ -446,13 +506,44 @@ export default function NotesPage() {
                           )}
                         </td>
                         <td style={{ verticalAlign: "top" }}>
-                          <button
-                            className="btn btn-sm btn-outline"
-                            onClick={() => handleDelete(n)}
-                            title="Delete note"
-                          >
-                            ✕
-                          </button>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {noteEditId === n.id ? (
+                              <>
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => saveNoteEdit(n)}
+                                  disabled={noteSaving}
+                                >
+                                  {noteSaving ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline"
+                                  onClick={() => setNoteEditId(null)}
+                                  disabled={noteSaving}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className="btn btn-sm btn-outline"
+                                  onClick={() => startNoteEdit(n)}
+                                  title="Edit note"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline"
+                                  onClick={() => handleDelete(n)}
+                                  title="Delete note"
+                                  style={{ justifyContent: "center" }}
+                                >
+                                  ✕
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

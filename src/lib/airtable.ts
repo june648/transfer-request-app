@@ -719,12 +719,22 @@ export async function createAsinNote(data: {
 
 export async function updateAsinNote(
   recordId: string,
-  fields: Partial<{ status: NoteStatus; francesFeedback: string }>
+  fields: Partial<{
+    asin: string;
+    productName: string;
+    note: string;
+    status: NoteStatus;
+    francesFeedback: string;
+  }>
 ): Promise<AsinNote> {
   const { baseId } = getConfig();
   const notesTable = await ensureNotesTable();
 
   const airtableFields: Record<string, unknown> = {};
+  if (fields.asin !== undefined) airtableFields["ASIN"] = fields.asin;
+  if (fields.productName !== undefined)
+    airtableFields["Product_Name"] = fields.productName;
+  if (fields.note !== undefined) airtableFields["Note"] = fields.note;
   if (fields.status !== undefined) airtableFields["Status"] = fields.status;
   if (fields.francesFeedback !== undefined)
     airtableFields["Frances_Feedback"] = fields.francesFeedback;
