@@ -103,7 +103,7 @@ export default function Home() {
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <TopBar onSettingsClick={() => setSettingsOpen(true)} />
 
-      <main style={{ flex: 1, padding: "24px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+      <main style={{ flex: 1, padding: "24px", maxWidth: 1600, margin: "0 auto", width: "100%" }}>
         {!configured ? (
           <div
             style={{
