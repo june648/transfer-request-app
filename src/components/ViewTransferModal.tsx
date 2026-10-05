@@ -123,7 +123,7 @@ export default function ViewTransferModal({
         style={{ maxWidth: 720 }}
       >
         <div className="modal-header">
-          <h2 style={{ fontSize: 16 }}>Transfer Request View</h2>
+          <h2 style={{ fontSize: 14 }}>Transfer Request View</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button
               className="btn btn-sm btn-primary"
@@ -151,7 +151,7 @@ export default function ViewTransferModal({
               ref={contentRef}
               style={{
                 fontFamily: "Calibri, Arial, Helvetica, sans-serif",
-                fontSize: 14,
+                fontSize: 13,
                 color: "#222",
                 lineHeight: 1.5,
                 maxWidth: 560,
@@ -167,7 +167,7 @@ export default function ViewTransferModal({
               >
                 <div
                   style={{
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: 700,
                     color: "#2b5797",
                     letterSpacing: 0.3,
@@ -178,7 +178,7 @@ export default function ViewTransferModal({
                 {transfer.description && (
                   <div
                     style={{
-                      fontSize: 13,
+                      fontSize: 12,
                       fontStyle: "italic",
                       color: "#555",
                       marginTop: 4,
@@ -189,7 +189,7 @@ export default function ViewTransferModal({
                 )}
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 11,
                     color: "#888",
                     marginTop: 4,
                   }}
@@ -214,7 +214,7 @@ export default function ViewTransferModal({
                   <div key={gIdx} style={{ marginBottom: 20 }}>
                     <div
                       style={{
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: 700,
                         color: "#2b5797",
                         marginBottom: 2,
@@ -226,7 +226,7 @@ export default function ViewTransferModal({
                     <table
                       style={{
                         borderCollapse: "collapse",
-                        fontSize: 13,
+                        fontSize: 12,
                       }}
                     >
                       <thead>
@@ -241,7 +241,7 @@ export default function ViewTransferModal({
                               padding: "6px 8px",
                               fontWeight: 700,
                               color: "#333",
-                              fontSize: 12,
+                              fontSize: 11,
                               width: 130,
                             }}
                           >
@@ -252,7 +252,7 @@ export default function ViewTransferModal({
                               padding: "6px 8px",
                               fontWeight: 700,
                               color: "#333",
-                              fontSize: 12,
+                              fontSize: 11,
                             }}
                           >
                             Product
@@ -262,7 +262,7 @@ export default function ViewTransferModal({
                               padding: "6px 8px",
                               fontWeight: 700,
                               color: "#333",
-                              fontSize: 12,
+                              fontSize: 11,
                               textAlign: "right",
                               width: 80,
                             }}
@@ -286,7 +286,7 @@ export default function ViewTransferModal({
                                 padding: "5px 8px",
                                 fontFamily:
                                   "Consolas, 'Courier New', monospace",
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: "#2b5797",
                                 fontWeight: 600,
                               }}
@@ -320,7 +320,7 @@ export default function ViewTransferModal({
                               padding: "5px 8px",
                               textAlign: "right",
                               fontWeight: 600,
-                              fontSize: 12,
+                              fontSize: 11,
                               color: "#555",
                             }}
                           >
@@ -350,7 +350,7 @@ export default function ViewTransferModal({
                     borderTop: "2px solid #2b5797",
                     paddingTop: 8,
                     textAlign: "right",
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: 700,
                     color: "#2b5797",
                   }}

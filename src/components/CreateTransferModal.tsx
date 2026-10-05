@@ -234,7 +234,7 @@ export default function CreateTransferModal({
               <span
                 style={{
                   marginLeft: 12,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: 500,
                   color: "var(--primary)",
                 }}
@@ -281,7 +281,7 @@ export default function CreateTransferModal({
               </div>
               <p
                 style={{
-                  fontSize: 13,
+                  fontSize: 12,
                   color: "var(--gray-500)",
                   margin: 0,
                 }}
@@ -324,7 +324,7 @@ export default function CreateTransferModal({
                   >
                     <span
                       style={{
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: 700,
                         color: "var(--primary)",
                         textTransform: "uppercase",
@@ -545,7 +545,7 @@ export default function CreateTransferModal({
                 <div>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color: "var(--gray-500)",
                       fontWeight: 600,
                     }}
@@ -554,7 +554,7 @@ export default function CreateTransferModal({
                   </span>
                   <div
                     style={{
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: 600,
                       color: "var(--primary)",
                     }}
@@ -565,7 +565,7 @@ export default function CreateTransferModal({
                 <div>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color: "var(--gray-500)",
                       fontWeight: 600,
                     }}
@@ -579,28 +579,28 @@ export default function CreateTransferModal({
                 <div>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color: "var(--gray-500)",
                       fontWeight: 600,
                     }}
                   >
                     WAREHOUSE GROUPS
                   </span>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>
                     {groups.length}
                   </div>
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color: "var(--gray-500)",
                       fontWeight: 600,
                     }}
                   >
                     DESCRIPTION
                   </span>
-                  <div style={{ fontSize: 14 }}>{description}</div>
+                  <div style={{ fontSize: 13 }}>{description}</div>
                 </div>
               </div>
 
@@ -620,19 +620,19 @@ export default function CreateTransferModal({
                   >
                     <span
                       style={{
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: 700,
                         color: "var(--primary)",
                       }}
                     >
                       Group {gIdx + 1}
                     </span>
-                    <span style={{ fontSize: 13, color: "var(--gray-600)" }}>
+                    <span style={{ fontSize: 12, color: "var(--gray-600)" }}>
                       {group.from} &rarr; {group.to}
                     </span>
                     <span
                       style={{
-                        fontSize: 12,
+                        fontSize: 11,
                         color: "var(--gray-400)",
                         marginLeft: "auto",
                       }}
@@ -680,7 +680,7 @@ export default function CreateTransferModal({
                   display: "flex",
                   justifyContent: "flex-end",
                   gap: 16,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: 600,
                   padding: "8px 0",
                 }}

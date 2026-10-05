@@ -24,6 +24,80 @@ function formatDate(iso: string) {
   });
 }
 
+// Checklist lines are stored in the note text as "[ ] item" / "[x] item".
+// Older notes written as numbered or bulleted lists show as unchecked items.
+const CHECK_LINE = /^\s*(?:\d+[.)]\s*|[-*•]\s*)?\[([ xX])\]\s?(.*)$/;
+const LIST_LINE = /^\s*(?:\d+[.)]|[-*•])\s+(.*)$/;
+
+function parseChecklistLine(line: string): { checked: boolean; text: string } | null {
+  const c = line.match(CHECK_LINE);
+  if (c) return { checked: c[1] !== " ", text: c[2] };
+  const l = line.match(LIST_LINE);
+  if (l) return { checked: false, text: l[1] };
+  return null;
+}
+
+// Turn numbered/bulleted lines into checklist items before saving
+function toChecklist(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      const item = parseChecklistLine(line);
+      return item ? `[${item.checked ? "x" : " "}] ${item.text}` : line;
+    })
+    .join("\n");
+}
+
+function toggleChecklistLine(text: string, index: number): string {
+  const lines = text.split("\n");
+  const item = parseChecklistLine(lines[index]);
+  if (!item) return text;
+  lines[index] = `[${item.checked ? " " : "x"}] ${item.text}`;
+  return lines.join("\n");
+}
+
+function NoteBody({ text, onToggle }: { text: string; onToggle: (index: number) => void }) {
+  const lines = text.split("\n");
+  const items = lines.map(parseChecklistLine);
+  const total = items.filter(Boolean).length;
+  const done = items.filter((i) => i?.checked).length;
+  return (
+    <div>
+      {lines.map((line, i) => {
+        const item = items[i];
+        if (!item) return <div key={i} style={{ whiteSpace: "pre-wrap", minHeight: "1em" }}>{line}</div>;
+        return (
+          <label
+            key={i}
+            style={{ display: "flex", gap: 6, alignItems: "flex-start", cursor: "pointer", padding: "1px 0" }}
+          >
+            <input
+              type="checkbox"
+              checked={item.checked}
+              onChange={() => onToggle(i)}
+              style={{ marginTop: 2, cursor: "pointer" }}
+            />
+            <span
+              style={{
+                whiteSpace: "pre-wrap",
+                textDecoration: item.checked ? "line-through" : "none",
+                color: item.checked ? "var(--gray-400)" : undefined,
+              }}
+            >
+              {item.text}
+            </span>
+          </label>
+        );
+      })}
+      {total > 1 && (
+        <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4 }}>
+          {done}/{total} done
+        </div>
+      )}
+    </div>
+  );
+}
+
 const STATUS_COLORS: Record<NoteStatus, { bg: string; fg: string }> = {
   Open: { bg: "var(--primary-light)", fg: "var(--primary)" },
   "In Progress": { bg: "var(--warning-light)", fg: "#9a6b00" },
@@ -117,7 +191,7 @@ export default function NotesPage() {
       await createAsinNote({
         asin: asin.trim().toUpperCase(),
         productName,
-        note: noteText.trim(),
+        note: toChecklist(noteText.trim()),
         status: newStatus,
       });
       setAsin("");
@@ -143,6 +217,18 @@ export default function NotesPage() {
     }
   };
 
+  const handleToggleItem = async (note: AsinNote, index: number) => {
+    const newText = toggleChecklistLine(note.note, index);
+    // Tick the box right away; put it back if saving fails
+    replaceNote({ ...note, note: newText });
+    try {
+      replaceNote(await updateAsinNote(note.id, { note: newText }));
+    } catch (err) {
+      replaceNote(note);
+      alert("Could not save the checklist: " + (err as Error).message);
+    }
+  };
+
   const startNoteEdit = (note: AsinNote) => {
     setNoteEditId(note.id);
     setAsinDraft(note.asin);
@@ -162,7 +248,7 @@ export default function NotesPage() {
           asin: newAsin,
           // Product name belonged to the old ASIN; drop it if the ASIN changed
           productName: newAsin === note.asin ? note.productName : "",
-          note: noteDraft.trim(),
+          note: toChecklist(noteDraft.trim()),
         })
       );
       setNoteEditId(null);
@@ -226,7 +312,7 @@ export default function NotesPage() {
       <main style={{ flex: 1, padding: "24px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
         {!configured ? (
           <div style={{ textAlign: "center", padding: "80px 20px", color: "var(--gray-500)" }}>
-            <h2 style={{ fontSize: 20, marginBottom: 8, color: "var(--gray-700)" }}>
+            <h2 style={{ fontSize: 18, marginBottom: 8, color: "var(--gray-700)" }}>
               Welcome to ASIN Notes
             </h2>
             <p style={{ marginBottom: 20 }}>
@@ -240,7 +326,7 @@ export default function NotesPage() {
           <>
             {/* New note */}
             <div style={{ ...card, padding: 20, marginBottom: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
                 Add a note
               </div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -271,7 +357,7 @@ export default function NotesPage() {
                     )}
                   </div>
                   {productName && (
-                    <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                    <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
                       {productName}
                     </div>
                   )}
@@ -283,9 +369,12 @@ export default function NotesPage() {
                     rows={3}
                     value={noteText}
                     onChange={(e) => setNoteText(e.target.value)}
-                    placeholder="What happened, what was decided, what to do next..."
+                    placeholder={"What happened, what was decided...\n1. To-do item\n2. Another to-do item"}
                     style={{ resize: "vertical" }}
                   />
+                  <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                    Start a line with a number (1.) or a dash (-) and it becomes a checkbox.
+                  </div>
                 </div>
                 <div className="form-group" style={{ width: 150 }}>
                   <label className="form-label">Status</label>
@@ -353,7 +442,7 @@ export default function NotesPage() {
                   color: "var(--danger)",
                   borderRadius: "var(--radius-md)",
                   marginBottom: 16,
-                  fontSize: 14,
+                  fontSize: 13,
                 }}
               >
                 {error}
@@ -408,20 +497,20 @@ export default function NotesPage() {
                                 cursor: "pointer",
                                 fontWeight: 600,
                                 color: "var(--primary)",
-                                fontSize: 14,
+                                fontSize: 13,
                               }}
                             >
                               {n.asin}
                             </button>
                             {n.productName && (
-                              <div style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                              <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
                                 {n.productName}
                               </div>
                             )}
                             </>
                           )}
                         </td>
-                        <td style={{ whiteSpace: "pre-wrap", verticalAlign: "top" }}>
+                        <td style={{ verticalAlign: "top" }}>
                           {noteEditId === n.id ? (
                             <textarea
                               className="form-input"
@@ -432,7 +521,7 @@ export default function NotesPage() {
                               style={{ width: "100%", resize: "vertical" }}
                             />
                           ) : (
-                            n.note
+                            <NoteBody text={n.note} onToggle={(i) => handleToggleItem(n, i)} />
                           )}
                         </td>
                         <td style={{ verticalAlign: "top" }}>
@@ -442,7 +531,7 @@ export default function NotesPage() {
                             onChange={(e) => handleStatusChange(n, e.target.value as NoteStatus)}
                             style={{
                               padding: "4px 8px",
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: 600,
                               background: STATUS_COLORS[n.status].bg,
                               color: STATUS_COLORS[n.status].fg,

@@ -36,7 +36,7 @@ export default function TransferTable({
         }}
       >
         <div style={{ fontSize: 40, marginBottom: 12 }}>No transfer requests yet</div>
-        <p style={{ fontSize: 14 }}>
+        <p style={{ fontSize: 13 }}>
           Click &quot;New Transfer Request&quot; to create one.
         </p>
       </div>

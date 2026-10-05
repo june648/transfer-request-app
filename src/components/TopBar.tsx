@@ -57,10 +57,10 @@ export default function TopBar({ onSettingsClick }: TopBarProps) {
           }}
         />
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>
             {current.label}
           </div>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Internal Tools</div>
+          <div style={{ fontSize: 11, opacity: 0.8 }}>Internal Tools</div>
         </div>
         <nav style={{ display: "flex", gap: 4, marginLeft: 16 }}>
           {NAV_LINKS.map((l) => (
@@ -70,7 +70,7 @@ export default function TopBar({ onSettingsClick }: TopBarProps) {
               style={{
                 padding: "6px 12px",
                 borderRadius: "var(--radius-md)",
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 500,
                 color: "white",
                 textDecoration: "none",

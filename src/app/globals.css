@@ -39,6 +39,7 @@
 
 body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
   background: var(--gray-50);
   color: var(--gray-800);
   min-height: 100vh;
@@ -51,7 +52,7 @@ body {
   gap: 6px;
   padding: 8px 16px;
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -99,7 +100,7 @@ body {
 
 .btn-sm {
   padding: 4px 10px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .btn-icon {
@@ -116,7 +117,7 @@ body {
 }
 
 .form-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--gray-600);
 }
@@ -125,7 +126,7 @@ body {
   padding: 8px 12px;
   border: 1px solid var(--gray-300);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
   transition: border-color 0.15s;
 }
@@ -170,7 +171,7 @@ body {
 }
 
 .modal-header h2 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -190,14 +191,14 @@ body {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .data-table th {
   text-align: left;
   padding: 10px 12px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--gray-500);
@@ -225,7 +226,7 @@ body {
   flex: 1;
   text-align: center;
   padding: 10px 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--gray-400);
   border-bottom: 3px solid var(--gray-200);
@@ -264,7 +265,7 @@ body {
 .autocomplete-item {
   padding: 8px 12px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   border-bottom: 1px solid var(--gray-100);
 }
 
@@ -287,7 +288,7 @@ body {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }

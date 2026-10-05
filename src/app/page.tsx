@@ -112,7 +112,7 @@ export default function Home() {
               color: "var(--gray-500)",
             }}
           >
-            <h2 style={{ fontSize: 20, marginBottom: 8, color: "var(--gray-700)" }}>
+            <h2 style={{ fontSize: 18, marginBottom: 8, color: "var(--gray-700)" }}>
               Welcome to Transfer Requests
             </h2>
             <p style={{ marginBottom: 20 }}>
@@ -145,10 +145,10 @@ export default function Home() {
                   minWidth: 120,
                 }}
               >
-                <div style={{ fontSize: 12, color: "var(--gray-500)", fontWeight: 600 }}>
+                <div style={{ fontSize: 11, color: "var(--gray-500)", fontWeight: 600 }}>
                   TOTAL
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primary)" }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "var(--primary)" }}>
                   {transfers.length}
                 </div>
               </div>
@@ -164,10 +164,10 @@ export default function Home() {
                       minWidth: 100,
                     }}
                   >
-                    <div style={{ fontSize: 12, marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, marginBottom: 4 }}>
                       <StatusBadge status={s} />
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 700 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>
                       {statusCounts[s]}
                     </div>
                   </div>
@@ -231,7 +231,7 @@ export default function Home() {
                   color: "var(--danger)",
                   borderRadius: "var(--radius-md)",
                   marginBottom: 16,
-                  fontSize: 14,
+                  fontSize: 13,
                 }}
               >
                 {error}

@@ -332,7 +332,7 @@ export default function EditTransferModal({
             <span
               style={{
                 marginLeft: 12,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 500,
                 color: "var(--primary)",
               }}
@@ -384,11 +384,11 @@ export default function EditTransferModal({
 
           {/* Warehouse Groups */}
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
               Warehouse Groups
             </h3>
             {loading ? (
-              <p style={{ color: "var(--gray-400)", fontSize: 13 }}>
+              <p style={{ color: "var(--gray-400)", fontSize: 12 }}>
                 Loading items...
               </p>
             ) : (
@@ -426,7 +426,7 @@ export default function EditTransferModal({
                       >
                         <span
                           style={{
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: 700,
                             color: "var(--primary)",
                             textTransform: "uppercase",

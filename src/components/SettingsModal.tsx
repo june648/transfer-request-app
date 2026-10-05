@@ -45,7 +45,7 @@ export default function SettingsModal({
           </button>
         </div>
         <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <p style={{ fontSize: 13, color: "var(--gray-500)" }}>
+          <p style={{ fontSize: 12, color: "var(--gray-500)" }}>
             Enter your Airtable Personal Access Token and the Base ID where
             transfer request tables will be created.
           </p>
@@ -68,7 +68,7 @@ export default function SettingsModal({
               placeholder="appXXXXXXXXXXXXXX"
             />
           </div>
-          <p style={{ fontSize: 12, color: "var(--gray-400)" }}>
+          <p style={{ fontSize: 11, color: "var(--gray-400)" }}>
             Tables &quot;Transfer_Requests&quot; and &quot;Transfer_Line_Items&quot; will be
             auto-created in this base if they don&apos;t exist. Products catalog is
             read from the shared SCM base for ASIN auto-suggest.
