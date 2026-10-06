@@ -351,6 +351,25 @@ export default function NotesPage() {
     }
   };
 
+  // Undo an ID created by mistake: removes the request and unlinks the note
+  const handleRemoveId = async (note: AsinNote) => {
+    if (
+      !confirm(
+        `Remove request ${note.transferRequestId}? It will be deleted from Transfer Requests. The note itself stays.`
+      )
+    )
+      return;
+    setCreatingIdFor(note.id);
+    try {
+      await deleteTransferByRequestId(note.transferRequestId);
+      replaceNote(await updateAsinNote(note.id, { transferRequestId: "" }));
+    } catch (err) {
+      alert("Could not remove the Request ID: " + (err as Error).message);
+    } finally {
+      setCreatingIdFor(null);
+    }
+  };
+
   const handleAddShots = async (note: AsinNote, files: File[]) => {
     setUploadingIds((prev) => new Set(prev).add(note.id));
     try {
@@ -721,9 +740,27 @@ export default function NotesPage() {
                           </td>
                           <td rowSpan={span} className="shared" style={{ whiteSpace: "nowrap" }}>
                             {n.transferRequestId ? (
-                              <span style={{ fontWeight: 700, color: "var(--primary)" }}>
-                                {n.transferRequestId}
-                              </span>
+                              <>
+                                <span style={{ fontWeight: 700, color: "var(--primary)" }}>
+                                  {n.transferRequestId}
+                                </span>
+                                <button
+                                  onClick={() => handleRemoveId(n)}
+                                  disabled={creatingIdFor === n.id}
+                                  title="Remove this Request ID (deletes it from Transfer Requests)"
+                                  style={{
+                                    marginLeft: 4,
+                                    background: "none",
+                                    border: "none",
+                                    padding: "0 2px",
+                                    cursor: "pointer",
+                                    color: "var(--gray-400)",
+                                    fontSize: 11,
+                                  }}
+                                >
+                                  {creatingIdFor === n.id ? "..." : "✕"}
+                                </button>
+                              </>
                             ) : n.status === "Open" ? (
                               <button
                                 className="btn btn-sm btn-outline"
