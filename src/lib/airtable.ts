@@ -7,6 +7,7 @@ import {
   WarehouseGroup,
   AsinNote,
   NoteStatus,
+  NoteScreenshot,
 } from "@/types/transfer";
 
 const STORAGE_KEYS = {
@@ -21,9 +22,9 @@ const PRODUCTS_TABLE_ID = "tblLixRBZkc3IViAG";
 interface TableCache {
   transferRequests?: string;
   transferLineItems?: string;
-  // Bumped from `asinNotes` when Status/Frances_Feedback were added, so
-  // browsers that cached the old table re-check for the new fields.
-  asinNotesV2?: string;
+  // Bumped (asinNotes -> V2 -> V3) whenever fields are added, so browsers
+  // that cached the old table re-check for the new fields.
+  asinNotesV3?: string;
 }
 
 export function getConfig() {
@@ -602,10 +603,18 @@ const NOTE_STATUS_FIELD = {
 };
 
 const NOTE_FEEDBACK_FIELD = { name: "Frances_Feedback", type: "multilineText" };
+const NOTE_TR_FIELD = { name: "TransferRequest_ID", type: "singleLineText" };
+const NOTE_SCREENSHOTS_FIELD = { name: "Screenshots", type: "multipleAttachments" };
+const NOTE_LATER_FIELDS = [
+  NOTE_STATUS_FIELD,
+  NOTE_FEEDBACK_FIELD,
+  NOTE_TR_FIELD,
+  NOTE_SCREENSHOTS_FIELD,
+];
 
 async function ensureNotesTable(): Promise<string> {
   const cache = getTableCache();
-  if (cache.asinNotesV2) return cache.asinNotesV2;
+  if (cache.asinNotesV3) return cache.asinNotesV3;
 
   const { baseId } = getConfig();
   const { tables } = await metaFetch(`bases/${baseId}/tables`);
@@ -620,8 +629,7 @@ async function ensureNotesTable(): Promise<string> {
           { name: "ASIN", type: "singleLineText" },
           { name: "Product_Name", type: "singleLineText" },
           { name: "Note", type: "multilineText" },
-          NOTE_STATUS_FIELD,
-          NOTE_FEEDBACK_FIELD,
+          ...NOTE_LATER_FIELDS,
           {
             name: "Created_Date",
             type: "dateTime",
@@ -639,7 +647,7 @@ async function ensureNotesTable(): Promise<string> {
     const existingFieldNames = (table.fields || []).map(
       (f: { name: string }) => f.name
     );
-    for (const field of [NOTE_STATUS_FIELD, NOTE_FEEDBACK_FIELD]) {
+    for (const field of NOTE_LATER_FIELDS) {
       if (!existingFieldNames.includes(field.name)) {
         await metaFetch(`bases/${baseId}/tables/${table.id}/fields`, {
           method: "POST",
@@ -650,7 +658,7 @@ async function ensureNotesTable(): Promise<string> {
   }
 
   const tableId = table.id || table.name;
-  setTableCache({ ...getTableCache(), asinNotesV2: tableId });
+  setTableCache({ ...getTableCache(), asinNotesV3: tableId });
   return tableId;
 }
 
@@ -666,8 +674,32 @@ function mapAsinNote(record: {
     note: (f["Note"] as string) || "",
     status: (f["Status"] as NoteStatus) || "Open",
     francesFeedback: (f["Frances_Feedback"] as string) || "",
+    transferRequestId: (f["TransferRequest_ID"] as string) || "",
+    screenshots: (
+      (f["Screenshots"] as {
+        id: string;
+        url: string;
+        filename: string;
+        thumbnails?: { large?: { url: string } };
+      }[]) || []
+    ).map(
+      (a): NoteScreenshot => ({
+        id: a.id,
+        url: a.url,
+        thumbUrl: a.thumbnails?.large?.url || a.url,
+        filename: a.filename,
+      })
+    ),
     createdDate: (f["Created_Date"] as string) || "",
   };
+}
+
+export async function fetchAsinNote(recordId: string): Promise<AsinNote> {
+  const { baseId } = getConfig();
+  const notesTable = await ensureNotesTable();
+  return mapAsinNote(
+    await airtableFetch(baseId, `${encodeURIComponent(notesTable)}/${recordId}`)
+  );
 }
 
 export async function fetchAsinNotes(): Promise<AsinNote[]> {
@@ -725,6 +757,9 @@ export async function updateAsinNote(
     note: string;
     status: NoteStatus;
     francesFeedback: string;
+    transferRequestId: string;
+    // Screenshots to keep, by attachment id (anything left out is removed)
+    screenshotIds: string[];
   }>
 ): Promise<AsinNote> {
   const { baseId } = getConfig();
@@ -738,6 +773,10 @@ export async function updateAsinNote(
   if (fields.status !== undefined) airtableFields["Status"] = fields.status;
   if (fields.francesFeedback !== undefined)
     airtableFields["Frances_Feedback"] = fields.francesFeedback;
+  if (fields.transferRequestId !== undefined)
+    airtableFields["TransferRequest_ID"] = fields.transferRequestId;
+  if (fields.screenshotIds !== undefined)
+    airtableFields["Screenshots"] = fields.screenshotIds.map((id) => ({ id }));
 
   const result = await airtableFetch(
     baseId,
@@ -755,6 +794,80 @@ export async function deleteAsinNote(recordId: string): Promise<void> {
     `${encodeURIComponent(notesTable)}/${recordId}`,
     { method: "DELETE" }
   );
+}
+
+function fileToBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+    reader.onerror = () => reject(new Error("Could not read the image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Airtable's direct upload endpoint takes files up to 5 MB
+export const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+
+export async function uploadNoteScreenshot(
+  recordId: string,
+  file: File
+): Promise<AsinNote> {
+  if (file.size > MAX_SCREENSHOT_BYTES) {
+    throw new Error("The image is larger than 5 MB. Try a smaller screenshot.");
+  }
+  const { token, baseId } = getConfig();
+  await ensureNotesTable();
+  const ext = (file.type.split("/")[1] || "png").replace("jpeg", "jpg");
+  const filename =
+    file.name && file.name !== "image.png"
+      ? file.name
+      : `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+
+  const res = await fetchWithRetry(
+    `https://content.airtable.com/v0/${baseId}/${recordId}/Screenshots/uploadAttachment`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contentType: file.type || "image/png",
+        file: await fileToBase64(file),
+        filename,
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Airtable error: ${res.status}`);
+  }
+  // The upload response keys fields by ID, so re-read the note by name
+  return fetchAsinNote(recordId);
+}
+
+// Gives an Open note its own Request ID on the Transfer Requests page
+export async function createTransferForNote(note: AsinNote): Promise<AsinNote> {
+  const transferRequestId = await generateTransferRequestId();
+  await createTransferRequest({
+    transferRequestId,
+    from: "",
+    to: "",
+    description: `ASIN Note: ${note.asin}${note.productName ? ` - ${note.productName}` : ""}`,
+    status: "Draft",
+  });
+  return updateAsinNote(note.id, { transferRequestId });
+}
+
+export async function deleteTransferByRequestId(
+  transferRequestId: string
+): Promise<void> {
+  const match = (await fetchTransferRequests()).find(
+    (t) => t.transferRequestId === transferRequestId
+  );
+  if (!match) return;
+  await deleteLineItemsByTransfer(transferRequestId);
+  await deleteTransferRequest(match.id);
 }
 
 // --- Products Catalog (cross-base) ---

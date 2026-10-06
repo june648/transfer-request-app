@@ -78,5 +78,15 @@ export interface AsinNote {
   note: string;
   status: NoteStatus;
   francesFeedback: string;
+  // Request ID on the Transfer Requests page, created when the note is Open
+  transferRequestId: string;
+  screenshots: NoteScreenshot[];
   createdDate: string;
+}
+
+export interface NoteScreenshot {
+  id: string;
+  url: string;
+  thumbUrl: string;
+  filename: string;
 }

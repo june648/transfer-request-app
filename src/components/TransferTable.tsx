@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { TransferRequest } from "@/types/transfer";
 import StatusBadge from "./StatusBadge";
 
 interface TransferTableProps {
   transfers: TransferRequest[];
+  noteRequestIds: Set<string>;
   onView: (transfer: TransferRequest) => void;
   onEdit: (transfer: TransferRequest) => void;
   onStatusChange: (transfer: TransferRequest, status: string) => void;
@@ -12,6 +14,7 @@ interface TransferTableProps {
 
 export default function TransferTable({
   transfers,
+  noteRequestIds,
   onView,
   onEdit,
   onStatusChange,
@@ -61,7 +64,32 @@ export default function TransferTable({
           {transfers.map((tr) => (
             <tr key={tr.id}>
               <td style={{ fontWeight: 600, color: "var(--primary)", whiteSpace: "nowrap" }}>
-                {tr.transferRequestId}
+                {noteRequestIds.has(tr.transferRequestId) ? (
+                  <Link
+                    href={`/notes?tr=${encodeURIComponent(tr.transferRequestId)}`}
+                    title="Open the ASIN note for this request"
+                    style={{ color: "var(--primary)", textDecoration: "underline" }}
+                  >
+                    {tr.transferRequestId}
+                  </Link>
+                ) : (
+                  tr.transferRequestId
+                )}
+                {noteRequestIds.has(tr.transferRequestId) && (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "1px 6px",
+                      borderRadius: 10,
+                      background: "var(--primary-light)",
+                      color: "var(--primary)",
+                    }}
+                  >
+                    ASIN Note
+                  </span>
+                )}
               </td>
               <td>{tr.from}</td>
               <td>{tr.to}</td>

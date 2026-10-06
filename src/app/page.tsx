@@ -10,6 +10,7 @@ import {
   isConfigured,
   fetchTransferRequests,
   updateTransferRequest,
+  fetchAsinNotes,
 } from "@/lib/airtable";
 import TopBar from "@/components/TopBar";
 import SettingsModal from "@/components/SettingsModal";
@@ -21,6 +22,8 @@ import StatusBadge from "@/components/StatusBadge";
 
 export default function Home() {
   const [transfers, setTransfers] = useState<TransferRequest[]>([]);
+  // Request IDs that belong to an ASIN note; clicking them opens the note
+  const [noteRequestIds, setNoteRequestIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(false);
@@ -39,8 +42,15 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchTransferRequests();
+      const [data, notes] = await Promise.all([
+        fetchTransferRequests(),
+        // The table still works if notes can't be loaded; IDs just won't link
+        fetchAsinNotes().catch(() => []),
+      ]);
       setTransfers(data);
+      setNoteRequestIds(
+        new Set(notes.map((n) => n.transferRequestId).filter(Boolean))
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -260,6 +270,7 @@ export default function Home() {
               ) : (
                 <TransferTable
                   transfers={filtered}
+                  noteRequestIds={noteRequestIds}
                   onView={(tr) => setViewTransfer(tr)}
                   onEdit={(tr) => setEditTransfer(tr)}
                   onStatusChange={handleStatusChange}

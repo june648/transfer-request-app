@@ -215,6 +215,70 @@ body {
   background: var(--primary-light);
 }
 
+/* Spreadsheet-style log table (ASIN Notes): one row per action */
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.log-table th {
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 7px 8px;
+  border: 1px solid #2d4aa8;
+  white-space: nowrap;
+}
+
+.log-table td {
+  padding: 5px 8px;
+  border: 1px solid #c7d2ee;
+  vertical-align: top;
+}
+
+.log-table tbody tr:nth-child(odd) td.band {
+  background: #dfe6f6;
+}
+
+.log-table tbody tr:nth-child(even) td.band {
+  background: white;
+}
+
+.log-table td.shared {
+  background: white;
+}
+
+.log-table tr.note-first td {
+  border-top: 2px solid var(--primary);
+}
+
+.log-table td.done {
+  color: var(--gray-400);
+  text-decoration: line-through;
+}
+
+.paste-zone {
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--gray-500);
+  cursor: pointer;
+  text-align: center;
+  outline: none;
+}
+
+.paste-zone:focus {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
 /* Stepper */
 .stepper {
   display: flex;

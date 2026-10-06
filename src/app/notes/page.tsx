@@ -9,6 +9,9 @@ import {
   updateAsinNote,
   deleteAsinNote,
   searchProducts,
+  uploadNoteScreenshot,
+  createTransferForNote,
+  deleteTransferByRequestId,
 } from "@/lib/airtable";
 import TopBar from "@/components/TopBar";
 import SettingsModal from "@/components/SettingsModal";
@@ -56,44 +59,117 @@ function toggleChecklistLine(text: string, index: number): string {
   return lines.join("\n");
 }
 
-function NoteBody({ text, onToggle }: { text: string; onToggle: (index: number) => void }) {
-  const lines = text.split("\n");
-  const items = lines.map(parseChecklistLine);
-  const total = items.filter(Boolean).length;
-  const done = items.filter((i) => i?.checked).length;
+interface LogRow {
+  index: number; // line number in the note text, for ticking boxes
+  num: number | null; // checklist item number, null for plain text lines
+  checked: boolean;
+  text: string;
+}
+
+// Each non-empty line of a note becomes its own row in the log table
+function noteRows(text: string): LogRow[] {
+  let num = 0;
+  const rows: LogRow[] = [];
+  text.split("\n").forEach((line, index) => {
+    if (!line.trim()) return;
+    const item = parseChecklistLine(line);
+    rows.push(
+      item
+        ? { index, num: ++num, checked: item.checked, text: item.text }
+        : { index, num: null, checked: false, text: line }
+    );
+  });
+  return rows.length ? rows : [{ index: -1, num: null, checked: false, text: "" }];
+}
+
+function clipboardImages(e: React.ClipboardEvent): File[] {
+  return Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+}
+
+function ScreenshotsCell({
+  note,
+  uploading,
+  onAdd,
+  onRemove,
+}: {
+  note: AsinNote;
+  uploading: boolean;
+  onAdd: (files: File[]) => void;
+  onRemove: (shotId: string) => void;
+}) {
+  const fileInput = useRef<HTMLInputElement>(null);
   return (
-    <div>
-      {lines.map((line, i) => {
-        const item = items[i];
-        if (!item) return <div key={i} style={{ whiteSpace: "pre-wrap", minHeight: "1em" }}>{line}</div>;
-        return (
-          <label
-            key={i}
-            style={{ display: "flex", gap: 6, alignItems: "flex-start", cursor: "pointer", padding: "1px 0" }}
-          >
-            <input
-              type="checkbox"
-              checked={item.checked}
-              onChange={() => onToggle(i)}
-              style={{ marginTop: 2, cursor: "pointer" }}
-            />
-            <span
-              style={{
-                whiteSpace: "pre-wrap",
-                textDecoration: item.checked ? "line-through" : "none",
-                color: item.checked ? "var(--gray-400)" : undefined,
-              }}
-            >
-              {item.text}
-            </span>
-          </label>
-        );
-      })}
-      {total > 1 && (
-        <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4 }}>
-          {done}/{total} done
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 120 }}>
+      {note.screenshots.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {note.screenshots.map((sh) => (
+            <div key={sh.id} style={{ position: "relative" }}>
+              <a href={sh.url} target="_blank" rel="noreferrer" title="Open full size">
+                <img
+                  src={sh.thumbUrl}
+                  alt={sh.filename}
+                  style={{
+                    width: 56,
+                    height: 42,
+                    objectFit: "cover",
+                    borderRadius: 3,
+                    border: "1px solid var(--gray-300)",
+                    display: "block",
+                  }}
+                />
+              </a>
+              <button
+                onClick={() => onRemove(sh.id)}
+                title="Remove screenshot"
+                style={{
+                  position: "absolute",
+                  top: -6,
+                  right: -6,
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  border: "none",
+                  background: "var(--gray-600)",
+                  color: "white",
+                  fontSize: 10,
+                  lineHeight: "16px",
+                  padding: 0,
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
       )}
+      <div
+        className="paste-zone"
+        tabIndex={0}
+        onPaste={(e) => {
+          const imgs = clipboardImages(e);
+          if (imgs.length) {
+            e.preventDefault();
+            onAdd(imgs);
+          }
+        }}
+        onDoubleClick={() => fileInput.current?.click()}
+        title="Click here, then press Ctrl+V (⌘+V on Mac). Double-click to pick a file."
+      >
+        {uploading ? "Uploading..." : "Click, then paste"}
+      </div>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          e.target.value = "";
+          if (files.length) onAdd(files);
+        }}
+      />
     </div>
   );
 }
@@ -116,7 +192,12 @@ export default function NotesPage() {
   const [productName, setProductName] = useState("");
   const [noteText, setNoteText] = useState("");
   const [newStatus, setNewStatus] = useState<NoteStatus>("Open");
+  const [newShots, setNewShots] = useState<{ file: File; preview: string }[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // Notes with a screenshot upload in progress
+  const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
+  const [creatingIdFor, setCreatingIdFor] = useState<string | null>(null);
 
   // ASIN autocomplete
   const [suggestions, setSuggestions] = useState<Product[]>([]);
@@ -147,6 +228,12 @@ export default function NotesPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Coming from a Request ID on the Transfer Requests page (?tr=TR-...)
+  useEffect(() => {
+    const tr = new URLSearchParams(window.location.search).get("tr");
+    if (tr) setSearchText(tr);
   }, []);
 
   useEffect(() => {
@@ -184,20 +271,52 @@ export default function NotesPage() {
     setShowSuggestions(false);
   };
 
+  const addNewShots = (files: File[]) =>
+    setNewShots((prev) => [
+      ...prev,
+      ...files.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+    ]);
+
+  const removeNewShot = (i: number) =>
+    setNewShots((prev) => {
+      URL.revokeObjectURL(prev[i].preview);
+      return prev.filter((_, j) => j !== i);
+    });
+
   const handleAdd = async () => {
     if (!asin.trim() || !noteText.trim()) return;
     setSaving(true);
     try {
-      await createAsinNote({
+      let note = await createAsinNote({
         asin: asin.trim().toUpperCase(),
         productName,
         note: toChecklist(noteText.trim()),
         status: newStatus,
       });
+      const problems: string[] = [];
+      if (note.status === "Open") {
+        try {
+          note = await createTransferForNote(note);
+        } catch (err) {
+          problems.push("the Request ID could not be created (" + (err as Error).message + ")");
+        }
+      }
+      for (const shot of newShots) {
+        try {
+          note = await uploadNoteScreenshot(note.id, shot.file);
+        } catch (err) {
+          problems.push("a screenshot could not be uploaded (" + (err as Error).message + ")");
+        }
+      }
+      if (problems.length) {
+        alert("The note was saved, but " + problems.join("; ") + ".");
+      }
+      newShots.forEach((s) => URL.revokeObjectURL(s.preview));
       setAsin("");
       setProductName("");
       setNoteText("");
       setNewStatus("Open");
+      setNewShots([]);
       loadNotes();
     } catch (err) {
       alert("Could not save the note: " + (err as Error).message);
@@ -210,10 +329,53 @@ export default function NotesPage() {
     setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
 
   const handleStatusChange = async (note: AsinNote, status: NoteStatus) => {
+    let updated: AsinNote;
     try {
-      replaceNote(await updateAsinNote(note.id, { status }));
+      updated = await updateAsinNote(note.id, { status });
+      replaceNote(updated);
     } catch (err) {
       alert("Could not change the status: " + (err as Error).message);
+      return;
+    }
+    if (status === "Open" && !updated.transferRequestId) handleCreateId(updated);
+  };
+
+  const handleCreateId = async (note: AsinNote) => {
+    setCreatingIdFor(note.id);
+    try {
+      replaceNote(await createTransferForNote(note));
+    } catch (err) {
+      alert("Could not create the Request ID: " + (err as Error).message);
+    } finally {
+      setCreatingIdFor(null);
+    }
+  };
+
+  const handleAddShots = async (note: AsinNote, files: File[]) => {
+    setUploadingIds((prev) => new Set(prev).add(note.id));
+    try {
+      for (const file of files) replaceNote(await uploadNoteScreenshot(note.id, file));
+    } catch (err) {
+      alert("Could not upload the screenshot: " + (err as Error).message);
+    } finally {
+      setUploadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(note.id);
+        return next;
+      });
+    }
+  };
+
+  const handleRemoveShot = async (note: AsinNote, shotId: string) => {
+    if (!confirm("Remove this screenshot?")) return;
+    try {
+      replaceNote(
+        await updateAsinNote(note.id, {
+          screenshotIds: note.screenshots.filter((s) => s.id !== shotId).map((s) => s.id),
+        })
+      );
+    } catch (err) {
+      alert("Could not remove the screenshot: " + (err as Error).message);
     }
   };
 
@@ -279,12 +441,26 @@ export default function NotesPage() {
   };
 
   const handleDelete = async (note: AsinNote) => {
-    if (!confirm(`Delete this note for ${note.asin}?`)) return;
+    const msg = note.transferRequestId
+      ? `Delete this note for ${note.asin}? Its request ${note.transferRequestId} will also be removed from Transfer Requests.`
+      : `Delete this note for ${note.asin}?`;
+    if (!confirm(msg)) return;
     try {
       await deleteAsinNote(note.id);
       setNotes((prev) => prev.filter((n) => n.id !== note.id));
     } catch (err) {
       alert("Could not delete the note: " + (err as Error).message);
+      return;
+    }
+    if (note.transferRequestId) {
+      try {
+        await deleteTransferByRequestId(note.transferRequestId);
+      } catch (err) {
+        alert(
+          `The note was deleted, but request ${note.transferRequestId} could not be removed: ` +
+            (err as Error).message
+        );
+      }
     }
   };
 
@@ -294,6 +470,7 @@ export default function NotesPage() {
       (statusFilter === "All" || n.status === statusFilter) &&
       (!q ||
         n.asin.toLowerCase().includes(q) ||
+        n.transferRequestId.toLowerCase().includes(q) ||
         n.productName.toLowerCase().includes(q) ||
         n.note.toLowerCase().includes(q) ||
         n.francesFeedback.toLowerCase().includes(q))
@@ -369,12 +546,61 @@ export default function NotesPage() {
                     rows={3}
                     value={noteText}
                     onChange={(e) => setNoteText(e.target.value)}
+                    onPaste={(e) => {
+                      const imgs = clipboardImages(e);
+                      if (!imgs.length) return;
+                      // A copied screenshot has no text; keep normal text pastes working
+                      if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+                      addNewShots(imgs);
+                    }}
                     placeholder={"What happened, what was decided...\n1. To-do item\n2. Another to-do item"}
                     style={{ resize: "vertical" }}
                   />
                   <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
-                    Start a line with a number (1.) or a dash (-) and it becomes a checkbox.
+                    Each line becomes a row. Start a line with a number (1.) or a dash (-) and it
+                    becomes a checkbox. Paste a screenshot (Ctrl+V / ⌘+V) right into this box.
                   </div>
+                  {newShots.length > 0 && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                      {newShots.map((sh, i) => (
+                        <div key={sh.preview} style={{ position: "relative" }}>
+                          <img
+                            src={sh.preview}
+                            alt="Screenshot to attach"
+                            style={{
+                              width: 80,
+                              height: 60,
+                              objectFit: "cover",
+                              borderRadius: 4,
+                              border: "1px solid var(--gray-300)",
+                              display: "block",
+                            }}
+                          />
+                          <button
+                            onClick={() => removeNewShot(i)}
+                            title="Remove"
+                            style={{
+                              position: "absolute",
+                              top: -6,
+                              right: -6,
+                              width: 16,
+                              height: 16,
+                              borderRadius: "50%",
+                              border: "none",
+                              background: "var(--gray-600)",
+                              color: "white",
+                              fontSize: 10,
+                              lineHeight: "16px",
+                              padding: 0,
+                              cursor: "pointer",
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="form-group" style={{ width: 150 }}>
                   <label className="form-label">Status</label>
@@ -389,6 +615,11 @@ export default function NotesPage() {
                       </option>
                     ))}
                   </select>
+                  {newStatus === "Open" && (
+                    <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                      Gets a Request ID on the Transfer Requests page.
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
@@ -407,7 +638,7 @@ export default function NotesPage() {
               <input
                 className="form-input"
                 style={{ flex: 1, minWidth: 200 }}
-                placeholder="Search by ASIN, product, note, or feedback..."
+                placeholder="Search by Request ID, ASIN, product, note, or feedback..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
@@ -460,182 +691,257 @@ export default function NotesPage() {
                   {notes.length === 0 ? "No notes yet. Add the first one above." : "No notes match your search or filter."}
                 </div>
               ) : (
-                <table className="data-table">
+                <table className="log-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 170 }}>Date</th>
-                      <th style={{ width: 220 }}>ASIN</th>
-                      <th>Note</th>
-                      <th style={{ width: 140 }}>Status</th>
-                      <th>Frances Feedback</th>
-                      <th style={{ width: 80 }}></th>
+                      <th style={{ width: 120 }}>Date</th>
+                      <th style={{ width: 120 }}>Request ID</th>
+                      <th style={{ width: 190 }}>ASIN</th>
+                      <th style={{ width: 32 }}>#</th>
+                      <th style={{ width: 44 }}>Done</th>
+                      <th>Action / Note</th>
+                      <th style={{ width: 120 }}>Status</th>
+                      <th style={{ width: 150 }}>Screenshots</th>
+                      <th style={{ width: 240 }}>Frances Feedback</th>
+                      <th style={{ width: 70 }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((n) => (
-                      <tr key={n.id}>
-                        <td style={{ color: "var(--gray-500)", whiteSpace: "nowrap", verticalAlign: "top" }}>
-                          {formatDate(n.createdDate)}
-                        </td>
-                        <td style={{ verticalAlign: "top" }}>
-                          {noteEditId === n.id ? (
-                            <input
-                              className="form-input"
-                              style={{ width: "100%" }}
-                              value={asinDraft}
-                              onChange={(e) => setAsinDraft(e.target.value)}
-                            />
-                          ) : (
-                            <>
-                            <button
-                              onClick={() => setSearchText(n.asin)}
-                              title="Show all notes for this ASIN"
-                              style={{
-                                background: "none",
-                                border: "none",
-                                padding: 0,
-                                cursor: "pointer",
-                                fontWeight: 600,
-                                color: "var(--primary)",
-                                fontSize: 13,
-                              }}
-                            >
-                              {n.asin}
-                            </button>
-                            {n.productName && (
-                              <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
-                                {n.productName}
-                              </div>
-                            )}
-                            </>
-                          )}
-                        </td>
-                        <td style={{ verticalAlign: "top" }}>
-                          {noteEditId === n.id ? (
-                            <textarea
-                              className="form-input"
-                              rows={4}
-                              autoFocus
-                              value={noteDraft}
-                              onChange={(e) => setNoteDraft(e.target.value)}
-                              style={{ width: "100%", resize: "vertical" }}
-                            />
-                          ) : (
-                            <NoteBody text={n.note} onToggle={(i) => handleToggleItem(n, i)} />
-                          )}
-                        </td>
-                        <td style={{ verticalAlign: "top" }}>
-                          <select
-                            className="form-input"
-                            value={n.status}
-                            onChange={(e) => handleStatusChange(n, e.target.value as NoteStatus)}
-                            style={{
-                              padding: "4px 8px",
-                              fontSize: 12,
-                              fontWeight: 600,
-                              background: STATUS_COLORS[n.status].bg,
-                              color: STATUS_COLORS[n.status].fg,
-                              border: "none",
-                            }}
-                          >
-                            {NOTE_STATUSES.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={{ verticalAlign: "top" }}>
-                          {feedbackEditId === n.id ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                              <textarea
-                                className="form-input"
-                                rows={3}
-                                autoFocus
-                                value={feedbackDraft}
-                                onChange={(e) => setFeedbackDraft(e.target.value)}
-                                placeholder="Frances's feedback..."
-                                style={{ resize: "vertical" }}
-                              />
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <button
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => saveFeedback(n)}
-                                  disabled={feedbackSaving}
-                                >
-                                  {feedbackSaving ? "Saving..." : "Save"}
-                                </button>
-                                <button
-                                  className="btn btn-sm btn-outline"
-                                  onClick={() => setFeedbackEditId(null)}
-                                  disabled={feedbackSaving}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : n.francesFeedback ? (
-                            <div>
-                              <div style={{ whiteSpace: "pre-wrap" }}>{n.francesFeedback}</div>
+                    {filtered.flatMap((n) => {
+                      const editing = noteEditId === n.id;
+                      const rows = editing ? [null] : noteRows(n.note);
+                      const span = rows.length;
+                      const items = rows.filter((r) => r && r.num !== null);
+                      const doneCount = items.filter((r) => r!.checked).length;
+
+                      const shared = (
+                        <>
+                          <td rowSpan={span} className="shared" style={{ color: "var(--gray-500)", whiteSpace: "nowrap" }}>
+                            {formatDate(n.createdDate)}
+                          </td>
+                          <td rowSpan={span} className="shared" style={{ whiteSpace: "nowrap" }}>
+                            {n.transferRequestId ? (
+                              <span style={{ fontWeight: 700, color: "var(--primary)" }}>
+                                {n.transferRequestId}
+                              </span>
+                            ) : n.status === "Open" ? (
                               <button
                                 className="btn btn-sm btn-outline"
-                                onClick={() => startFeedbackEdit(n)}
-                                style={{ marginTop: 6 }}
+                                onClick={() => handleCreateId(n)}
+                                disabled={creatingIdFor === n.id}
+                                title="Add this note to the Transfer Requests page"
                               >
-                                Edit
+                                {creatingIdFor === n.id ? "Creating..." : "+ Create ID"}
                               </button>
-                            </div>
-                          ) : (
-                            <button
-                              className="btn btn-sm btn-outline"
-                              onClick={() => startFeedbackEdit(n)}
-                            >
-                              + Add feedback
-                            </button>
-                          )}
-                        </td>
-                        <td style={{ verticalAlign: "top" }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {noteEditId === n.id ? (
-                              <>
-                                <button
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => saveNoteEdit(n)}
-                                  disabled={noteSaving}
-                                >
-                                  {noteSaving ? "Saving..." : "Save"}
-                                </button>
-                                <button
-                                  className="btn btn-sm btn-outline"
-                                  onClick={() => setNoteEditId(null)}
-                                  disabled={noteSaving}
-                                >
-                                  Cancel
-                                </button>
-                              </>
+                            ) : (
+                              <span style={{ color: "var(--gray-400)" }}>-</span>
+                            )}
+                          </td>
+                          <td rowSpan={span} className="shared">
+                            {editing ? (
+                              <input
+                                className="form-input"
+                                style={{ width: "100%" }}
+                                value={asinDraft}
+                                onChange={(e) => setAsinDraft(e.target.value)}
+                              />
                             ) : (
                               <>
                                 <button
+                                  onClick={() => setSearchText(n.asin)}
+                                  title="Show all notes for this ASIN"
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    padding: 0,
+                                    cursor: "pointer",
+                                    fontWeight: 600,
+                                    color: "var(--primary)",
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  {n.asin}
+                                </button>
+                                {n.productName && (
+                                  <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                                    {n.productName}
+                                  </div>
+                                )}
+                                {items.length > 1 && (
+                                  <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4 }}>
+                                    {doneCount}/{items.length} done
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </td>
+                        </>
+                      );
+
+                      const trailing = (
+                        <>
+                          <td rowSpan={span} className="shared">
+                            <select
+                              className="form-input"
+                              value={n.status}
+                              onChange={(e) => handleStatusChange(n, e.target.value as NoteStatus)}
+                              style={{
+                                padding: "3px 6px",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                background: STATUS_COLORS[n.status].bg,
+                                color: STATUS_COLORS[n.status].fg,
+                                border: "none",
+                              }}
+                            >
+                              {NOTE_STATUSES.map((st) => (
+                                <option key={st} value={st}>
+                                  {st}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td rowSpan={span} className="shared">
+                            <ScreenshotsCell
+                              note={n}
+                              uploading={uploadingIds.has(n.id)}
+                              onAdd={(files) => handleAddShots(n, files)}
+                              onRemove={(id) => handleRemoveShot(n, id)}
+                            />
+                          </td>
+                          <td rowSpan={span} className="shared">
+                            {feedbackEditId === n.id ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <textarea
+                                  className="form-input"
+                                  rows={3}
+                                  autoFocus
+                                  value={feedbackDraft}
+                                  onChange={(e) => setFeedbackDraft(e.target.value)}
+                                  placeholder="Frances's feedback..."
+                                  style={{ resize: "vertical" }}
+                                />
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button
+                                    className="btn btn-sm btn-primary"
+                                    onClick={() => saveFeedback(n)}
+                                    disabled={feedbackSaving}
+                                  >
+                                    {feedbackSaving ? "Saving..." : "Save"}
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    onClick={() => setFeedbackEditId(null)}
+                                    disabled={feedbackSaving}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : n.francesFeedback ? (
+                              <div>
+                                <div style={{ whiteSpace: "pre-wrap" }}>{n.francesFeedback}</div>
+                                <button
                                   className="btn btn-sm btn-outline"
-                                  onClick={() => startNoteEdit(n)}
-                                  title="Edit note"
+                                  onClick={() => startFeedbackEdit(n)}
+                                  style={{ marginTop: 6 }}
                                 >
                                   Edit
                                 </button>
-                                <button
-                                  className="btn btn-sm btn-outline"
-                                  onClick={() => handleDelete(n)}
-                                  title="Delete note"
-                                  style={{ justifyContent: "center" }}
-                                >
-                                  ✕
-                                </button>
-                              </>
+                              </div>
+                            ) : (
+                              <button
+                                className="btn btn-sm btn-outline"
+                                onClick={() => startFeedbackEdit(n)}
+                              >
+                                + Add feedback
+                              </button>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td rowSpan={span} className="shared">
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {editing ? (
+                                <>
+                                  <button
+                                    className="btn btn-sm btn-primary"
+                                    onClick={() => saveNoteEdit(n)}
+                                    disabled={noteSaving}
+                                  >
+                                    {noteSaving ? "Saving..." : "Save"}
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    onClick={() => setNoteEditId(null)}
+                                    disabled={noteSaving}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    onClick={() => startNoteEdit(n)}
+                                    title="Edit note"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    onClick={() => handleDelete(n)}
+                                    title="Delete note"
+                                    style={{ justifyContent: "center" }}
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </>
+                      );
+
+                      return rows.map((r, i) => (
+                        <tr key={`${n.id}-${i}`} className={i === 0 ? "note-first" : undefined}>
+                          {i === 0 && shared}
+                          {r === null ? (
+                            <td colSpan={3} className="band">
+                              <textarea
+                                className="form-input"
+                                rows={Math.max(4, n.note.split("\n").length + 1)}
+                                autoFocus
+                                value={noteDraft}
+                                onChange={(e) => setNoteDraft(e.target.value)}
+                                style={{ width: "100%", resize: "vertical" }}
+                              />
+                            </td>
+                          ) : (
+                            <>
+                              <td className="band" style={{ textAlign: "center", color: "var(--gray-500)" }}>
+                                {r.num ?? ""}
+                              </td>
+                              <td className="band" style={{ textAlign: "center" }}>
+                                {r.num !== null && (
+                                  <input
+                                    type="checkbox"
+                                    checked={r.checked}
+                                    onChange={() => handleToggleItem(n, r.index)}
+                                    style={{ cursor: "pointer", marginTop: 2 }}
+                                  />
+                                )}
+                              </td>
+                              <td
+                                className={`band${r.checked ? " done" : ""}`}
+                                style={{ whiteSpace: "pre-wrap" }}
+                              >
+                                {r.text}
+                              </td>
+                            </>
+                          )}
+                          {i === 0 && trailing}
+                        </tr>
+                      ));
+                    })}
                   </tbody>
                 </table>
               )}
