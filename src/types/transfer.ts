@@ -4,6 +4,9 @@ export interface TransferRequest {
   from: string;
   to: string;
   description: string;
+  // Why we did it, plus a link to the Claude study behind the decision
+  reason: string;
+  studyLink: string;
   status: TransferStatus;
   createdDate: string;
   updatedDate: string;

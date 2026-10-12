@@ -22,6 +22,9 @@ const PRODUCTS_TABLE_ID = "tblLixRBZkc3IViAG";
 interface TableCache {
   transferRequests?: string;
   transferLineItems?: string;
+  // Set once Reason/Study_Link exist on Transfer_Requests, so browsers that
+  // cached the tables before those fields were added re-check once.
+  requestReasonFields?: boolean;
   // Bumped (asinNotes -> V2 -> V3 -> V4) whenever fields are added, so browsers
   // that cached the old table re-check for the new fields.
   asinNotesV4?: string;
@@ -136,12 +139,17 @@ async function metaFetch(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+const REQUEST_LATER_FIELDS = [
+  { name: "Reason", type: "multilineText" },
+  { name: "Study_Link", type: "url" },
+];
+
 async function ensureTables(): Promise<{
   requestsTable: string;
   lineItemsTable: string;
 }> {
   const cache = getTableCache();
-  if (cache.transferRequests && cache.transferLineItems) {
+  if (cache.transferRequests && cache.transferLineItems && cache.requestReasonFields) {
     return {
       requestsTable: cache.transferRequests,
       lineItemsTable: cache.transferLineItems,
@@ -168,6 +176,7 @@ async function ensureTables(): Promise<{
           { name: "From", type: "singleLineText" },
           { name: "To", type: "singleLineText" },
           { name: "Description", type: "singleLineText" },
+          ...REQUEST_LATER_FIELDS,
           {
             name: "Status",
             type: "singleSelect",
@@ -203,6 +212,19 @@ async function ensureTables(): Promise<{
       }),
     });
     requestsTable = created;
+  } else {
+    // Add fields introduced after the table was first created
+    const existingFieldNames = (requestsTable.fields || []).map(
+      (f: { name: string }) => f.name
+    );
+    for (const field of REQUEST_LATER_FIELDS) {
+      if (!existingFieldNames.includes(field.name)) {
+        await metaFetch(
+          `bases/${baseId}/tables/${requestsTable.id}/fields`,
+          { method: "POST", body: JSON.stringify(field) }
+        );
+      }
+    }
   }
 
   if (!lineItemsTable) {
@@ -248,6 +270,7 @@ async function ensureTables(): Promise<{
     ...cache,
     transferRequests: requestsTable.id || requestsTable.name,
     transferLineItems: lineItemsTable.id || lineItemsTable.name,
+    requestReasonFields: true,
   };
   setTableCache(newCache);
 
@@ -268,6 +291,8 @@ function mapTransferRequest(record: {
     from: (f["From"] as string) || "",
     to: (f["To"] as string) || "",
     description: (f["Description"] as string) || "",
+    reason: (f["Reason"] as string) || "",
+    studyLink: (f["Study_Link"] as string) || "",
     status: (f["Status"] as TransferStatus) || "Draft",
     createdDate: (f["Created_Date"] as string) || "",
     updatedDate: (f["Updated_Date"] as string) || "",
@@ -342,6 +367,8 @@ export async function createTransferRequest(data: {
   from: string;
   to: string;
   description: string;
+  reason?: string;
+  studyLink?: string;
   status: TransferStatus;
 }): Promise<TransferRequest> {
   const { baseId } = getConfig();
@@ -359,6 +386,8 @@ export async function createTransferRequest(data: {
           From: data.from,
           To: data.to,
           Description: data.description,
+          Reason: data.reason || "",
+          Study_Link: data.studyLink || "",
           Status: data.status,
           Created_Date: now,
           Updated_Date: now,
@@ -375,6 +404,8 @@ export async function updateTransferRequest(
     from: string;
     to: string;
     description: string;
+    reason: string;
+    studyLink: string;
     status: TransferStatus;
   }>
 ): Promise<TransferRequest> {
@@ -388,6 +419,9 @@ export async function updateTransferRequest(
   if (fields.to !== undefined) airtableFields["To"] = fields.to;
   if (fields.description !== undefined)
     airtableFields["Description"] = fields.description;
+  if (fields.reason !== undefined) airtableFields["Reason"] = fields.reason;
+  if (fields.studyLink !== undefined)
+    airtableFields["Study_Link"] = fields.studyLink;
   if (fields.status !== undefined) airtableFields["Status"] = fields.status;
 
   const result = await airtableFetch(
@@ -869,6 +903,8 @@ export async function createTransferForNote(note: AsinNote): Promise<AsinNote> {
     from: "",
     to: "",
     description: `ASIN Note: ${note.asin}${note.productName ? ` - ${note.productName}` : ""}`,
+    reason: note.reason,
+    studyLink: note.studyLink,
     status: "Draft",
   });
   return updateAsinNote(note.id, { transferRequestId });

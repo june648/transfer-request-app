@@ -13,6 +13,7 @@ import {
   createTransferForNote,
   deleteTransferByRequestId,
 } from "@/lib/airtable";
+import { normalizeLink } from "@/lib/links";
 import TopBar from "@/components/TopBar";
 import SettingsModal from "@/components/SettingsModal";
 
@@ -80,13 +81,6 @@ function noteRows(text: string): LogRow[] {
     );
   });
   return rows.length ? rows : [{ index: -1, num: null, checked: false, text: "" }];
-}
-
-// People often paste links without "https://"; add it so the link opens
-function normalizeLink(link: string): string {
-  const t = link.trim();
-  if (!t) return "";
-  return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
 }
 
 function clipboardImages(e: React.ClipboardEvent): File[] {

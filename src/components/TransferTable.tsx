@@ -55,6 +55,7 @@ export default function TransferTable({
             <th>From</th>
             <th>To</th>
             <th>Description</th>
+            <th>Reason / Study</th>
             <th>Status</th>
             <th>Created</th>
             <th style={{ textAlign: "center" }}>Actions</th>
@@ -95,6 +96,37 @@ export default function TransferTable({
               <td>{tr.to}</td>
               <td style={{ maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {tr.description}
+              </td>
+              <td style={{ maxWidth: 280 }}>
+                {tr.reason && (
+                  <div
+                    title={tr.reason}
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      fontSize: 12,
+                      color: "var(--gray-600)",
+                    }}
+                  >
+                    {tr.reason}
+                  </div>
+                )}
+                {tr.studyLink && (
+                  <a
+                    href={tr.studyLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={tr.studyLink}
+                    style={{ fontSize: 12, color: "var(--primary)", fontWeight: 600, whiteSpace: "nowrap" }}
+                  >
+                    📄 Claude study ↗
+                  </a>
+                )}
+                {!tr.reason && !tr.studyLink && (
+                  <span style={{ color: "var(--gray-400)" }}>-</span>
+                )}
               </td>
               <td>
                 <StatusBadge status={tr.status} />

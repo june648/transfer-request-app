@@ -17,6 +17,7 @@ import {
   updateLineItems,
   searchProducts,
 } from "@/lib/airtable";
+import { normalizeLink } from "@/lib/links";
 
 interface EditTransferModalProps {
   open: boolean;
@@ -32,6 +33,8 @@ export default function EditTransferModal({
   transfer,
 }: EditTransferModalProps) {
   const [description, setDescription] = useState("");
+  const [reason, setReason] = useState("");
+  const [studyLink, setStudyLink] = useState("");
   const [status, setStatus] = useState<TransferStatus>("Draft");
   const [groups, setGroups] = useState<WarehouseGroupEditable[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,6 +46,8 @@ export default function EditTransferModal({
   useEffect(() => {
     if (open && transfer) {
       setDescription(transfer.description);
+      setReason(transfer.reason);
+      setStudyLink(transfer.studyLink);
       setStatus(transfer.status);
       setLoading(true);
       fetchLineItems(transfer.transferRequestId)
@@ -257,6 +262,8 @@ export default function EditTransferModal({
         from: summaryFrom,
         to: summaryTo,
         description,
+        reason: reason.trim(),
+        studyLink: normalizeLink(studyLink),
         status,
       });
 
@@ -380,6 +387,26 @@ export default function EditTransferModal({
                 ))}
               </select>
             </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Reason (why we did this)</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Sales dropped after the price change, so we moved stock to..."
+                  style={{ resize: "vertical" }}
+                />
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Claude study link</label>
+                <input
+                  className="form-input"
+                  value={studyLink}
+                  onChange={(e) => setStudyLink(e.target.value)}
+                  placeholder="https://claude.ai/... (optional)"
+                />
+              </div>
           </div>
 
           {/* Warehouse Groups */}

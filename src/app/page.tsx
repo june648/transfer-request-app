@@ -94,7 +94,8 @@ export default function Home() {
       tr.transferRequestId.toLowerCase().includes(searchText.toLowerCase()) ||
       tr.from.toLowerCase().includes(searchText.toLowerCase()) ||
       tr.to.toLowerCase().includes(searchText.toLowerCase()) ||
-      tr.description.toLowerCase().includes(searchText.toLowerCase());
+      tr.description.toLowerCase().includes(searchText.toLowerCase()) ||
+      tr.reason.toLowerCase().includes(searchText.toLowerCase());
     const matchesStatus =
       statusFilter === "All" || tr.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -198,7 +199,7 @@ export default function Home() {
               <input
                 className="form-input"
                 style={{ flex: 1, minWidth: 200 }}
-                placeholder="Search by ID, from, to, description..."
+                placeholder="Search by ID, from, to, description, reason..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />

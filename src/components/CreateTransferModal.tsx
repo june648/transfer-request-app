@@ -8,6 +8,7 @@ import {
   createLineItemsFromGroups,
   searchProducts,
 } from "@/lib/airtable";
+import { normalizeLink } from "@/lib/links";
 import StatusBadge from "./StatusBadge";
 
 interface CreateTransferModalProps {
@@ -37,6 +38,8 @@ export default function CreateTransferModal({
 
   // Step 1 fields
   const [description, setDescription] = useState("");
+  const [reason, setReason] = useState("");
+  const [studyLink, setStudyLink] = useState("");
 
   // Step 2 fields — warehouse groups
   const [groups, setGroups] = useState<WarehouseGroup[]>([emptyGroup()]);
@@ -49,6 +52,8 @@ export default function CreateTransferModal({
     if (open) {
       setStep(1);
       setDescription("");
+      setReason("");
+      setStudyLink("");
       setGroups([emptyGroup()]);
       setRequestId("");
       setSaving(false);
@@ -176,6 +181,8 @@ export default function CreateTransferModal({
         from: summaryFrom,
         to: summaryTo,
         description,
+        reason: reason.trim(),
+        studyLink: normalizeLink(studyLink),
         status: "Submitted" as TransferStatus,
       });
       await createLineItemsFromGroups(requestId, groups);
@@ -196,6 +203,8 @@ export default function CreateTransferModal({
         from: summaryFrom,
         to: summaryTo,
         description,
+        reason: reason.trim(),
+        studyLink: normalizeLink(studyLink),
         status: "Draft" as TransferStatus,
       });
       const validGroups = groups
@@ -277,6 +286,26 @@ export default function CreateTransferModal({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Brief description of this transfer (e.g. Q2 FBA Restock)"
                   autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Reason (why we did this)</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Sales dropped after the price change, so we moved stock to..."
+                  style={{ resize: "vertical" }}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Claude study link</label>
+                <input
+                  className="form-input"
+                  value={studyLink}
+                  onChange={(e) => setStudyLink(e.target.value)}
+                  placeholder="https://claude.ai/... (optional)"
                 />
               </div>
               <p
@@ -602,6 +631,32 @@ export default function CreateTransferModal({
                   </span>
                   <div style={{ fontSize: 13 }}>{description}</div>
                 </div>
+                {(reason.trim() || studyLink.trim()) && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "var(--gray-500)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      REASON
+                    </span>
+                    {reason.trim() && (
+                      <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{reason.trim()}</div>
+                    )}
+                    {studyLink.trim() && (
+                      <a
+                        href={normalizeLink(studyLink)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 13, color: "var(--primary)", fontWeight: 600 }}
+                      >
+                        📄 Open Claude study ↗
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
 
               {groups.map((group, gIdx) => (

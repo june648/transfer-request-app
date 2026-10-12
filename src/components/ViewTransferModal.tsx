@@ -80,6 +80,8 @@ export default function ViewTransferModal({
     const lines: string[] = [];
     lines.push(`TRANSFER REQUEST — ${transfer.transferRequestId}`);
     if (transfer.description) lines.push(transfer.description);
+    if (transfer.reason) lines.push(`Reason: ${transfer.reason}`);
+    if (transfer.studyLink) lines.push(`Claude study: ${transfer.studyLink}`);
     lines.push("");
 
     groups.forEach((group, idx) => {
@@ -185,6 +187,30 @@ export default function ViewTransferModal({
                     }}
                   >
                     {transfer.description}
+                  </div>
+                )}
+                {transfer.reason && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#333",
+                      marginTop: 6,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    <strong>Reason:</strong> {transfer.reason}
+                  </div>
+                )}
+                {transfer.studyLink && (
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    <a
+                      href={transfer.studyLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#2b5797", fontWeight: 600 }}
+                    >
+                      📄 Open Claude study ↗
+                    </a>
                   </div>
                 )}
                 <div
