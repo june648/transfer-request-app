@@ -82,6 +82,13 @@ function noteRows(text: string): LogRow[] {
   return rows.length ? rows : [{ index: -1, num: null, checked: false, text: "" }];
 }
 
+// People often paste links without "https://"; add it so the link opens
+function normalizeLink(link: string): string {
+  const t = link.trim();
+  if (!t) return "";
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+}
+
 function clipboardImages(e: React.ClipboardEvent): File[] {
   return Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
 }
@@ -192,6 +199,8 @@ export default function NotesPage() {
   const [productName, setProductName] = useState("");
   const [noteText, setNoteText] = useState("");
   const [newStatus, setNewStatus] = useState<NoteStatus>("Open");
+  const [reasonText, setReasonText] = useState("");
+  const [studyLinkText, setStudyLinkText] = useState("");
   const [newShots, setNewShots] = useState<{ file: File; preview: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -212,6 +221,12 @@ export default function NotesPage() {
   const [asinDraft, setAsinDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+
+  // Reason / study link being edited (one row at a time)
+  const [reasonEditId, setReasonEditId] = useState<string | null>(null);
+  const [reasonDraft, setReasonDraft] = useState("");
+  const [linkDraft, setLinkDraft] = useState("");
+  const [reasonSaving, setReasonSaving] = useState(false);
 
   // Frances feedback being edited (one row at a time)
   const [feedbackEditId, setFeedbackEditId] = useState<string | null>(null);
@@ -292,6 +307,8 @@ export default function NotesPage() {
         productName,
         note: toChecklist(noteText.trim()),
         status: newStatus,
+        reason: reasonText.trim(),
+        studyLink: normalizeLink(studyLinkText),
       });
       const problems: string[] = [];
       if (note.status === "Open") {
@@ -316,6 +333,8 @@ export default function NotesPage() {
       setProductName("");
       setNoteText("");
       setNewStatus("Open");
+      setReasonText("");
+      setStudyLinkText("");
       setNewShots([]);
       loadNotes();
     } catch (err) {
@@ -440,6 +459,29 @@ export default function NotesPage() {
     }
   };
 
+  const startReasonEdit = (note: AsinNote) => {
+    setReasonEditId(note.id);
+    setReasonDraft(note.reason);
+    setLinkDraft(note.studyLink);
+  };
+
+  const saveReason = async (note: AsinNote) => {
+    setReasonSaving(true);
+    try {
+      replaceNote(
+        await updateAsinNote(note.id, {
+          reason: reasonDraft.trim(),
+          studyLink: normalizeLink(linkDraft),
+        })
+      );
+      setReasonEditId(null);
+    } catch (err) {
+      alert("Could not save the reason: " + (err as Error).message);
+    } finally {
+      setReasonSaving(false);
+    }
+  };
+
   const startFeedbackEdit = (note: AsinNote) => {
     setFeedbackEditId(note.id);
     setFeedbackDraft(note.francesFeedback);
@@ -492,6 +534,7 @@ export default function NotesPage() {
         n.transferRequestId.toLowerCase().includes(q) ||
         n.productName.toLowerCase().includes(q) ||
         n.note.toLowerCase().includes(q) ||
+        n.reason.toLowerCase().includes(q) ||
         n.francesFeedback.toLowerCase().includes(q))
   );
 
@@ -641,6 +684,31 @@ export default function NotesPage() {
                   )}
                 </div>
               </div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start", marginTop: 12 }}>
+                <div className="form-group" style={{ flex: 1, minWidth: 260 }}>
+                  <label className="form-label">Reason (why we did this)</label>
+                  <textarea
+                    className="form-input"
+                    rows={2}
+                    value={reasonText}
+                    onChange={(e) => setReasonText(e.target.value)}
+                    placeholder="e.g. Sales dropped after the price change, so we moved stock to..."
+                    style={{ resize: "vertical" }}
+                  />
+                </div>
+                <div className="form-group" style={{ width: 422 }}>
+                  <label className="form-label">Claude study link</label>
+                  <input
+                    className="form-input"
+                    value={studyLinkText}
+                    onChange={(e) => setStudyLinkText(e.target.value)}
+                    placeholder="https://claude.ai/..."
+                  />
+                  <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                    Optional. Paste the link to the study this decision was based on.
+                  </div>
+                </div>
+              </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
                 <button
                   className="btn btn-primary"
@@ -657,7 +725,7 @@ export default function NotesPage() {
               <input
                 className="form-input"
                 style={{ flex: 1, minWidth: 200 }}
-                placeholder="Search by Request ID, ASIN, product, note, or feedback..."
+                placeholder="Search by Request ID, ASIN, product, note, reason, or feedback..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
@@ -719,6 +787,7 @@ export default function NotesPage() {
                       <th style={{ width: 32 }}>#</th>
                       <th style={{ width: 44 }}>Done</th>
                       <th>Action / Note</th>
+                      <th style={{ width: 240 }}>Reason / Study</th>
                       <th style={{ width: 120 }}>Status</th>
                       <th style={{ width: 150 }}>Screenshots</th>
                       <th style={{ width: 240 }}>Frances Feedback</th>
@@ -817,6 +886,81 @@ export default function NotesPage() {
 
                       const trailing = (
                         <>
+                          <td rowSpan={span} className="shared">
+                            {reasonEditId === n.id ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <textarea
+                                  className="form-input"
+                                  rows={3}
+                                  autoFocus
+                                  value={reasonDraft}
+                                  onChange={(e) => setReasonDraft(e.target.value)}
+                                  placeholder="Why we did this..."
+                                  style={{ resize: "vertical" }}
+                                />
+                                <input
+                                  className="form-input"
+                                  value={linkDraft}
+                                  onChange={(e) => setLinkDraft(e.target.value)}
+                                  placeholder="Claude study link (optional)"
+                                />
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button
+                                    className="btn btn-sm btn-primary"
+                                    onClick={() => saveReason(n)}
+                                    disabled={reasonSaving}
+                                  >
+                                    {reasonSaving ? "Saving..." : "Save"}
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    onClick={() => setReasonEditId(null)}
+                                    disabled={reasonSaving}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : n.reason || n.studyLink ? (
+                              <div>
+                                {n.reason && (
+                                  <div style={{ whiteSpace: "pre-wrap" }}>{n.reason}</div>
+                                )}
+                                {n.studyLink && (
+                                  <a
+                                    href={n.studyLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={n.studyLink}
+                                    style={{
+                                      display: "inline-block",
+                                      marginTop: n.reason ? 4 : 0,
+                                      color: "var(--primary)",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    📄 Open Claude study ↗
+                                  </a>
+                                )}
+                                <div>
+                                  <button
+                                    className="btn btn-sm btn-outline"
+                                    onClick={() => startReasonEdit(n)}
+                                    style={{ marginTop: 6 }}
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                className="btn btn-sm btn-outline"
+                                onClick={() => startReasonEdit(n)}
+                              >
+                                + Add reason
+                              </button>
+                            )}
+                          </td>
                           <td rowSpan={span} className="shared">
                             <select
                               className="form-input"

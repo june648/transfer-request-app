@@ -78,6 +78,9 @@ export interface AsinNote {
   note: string;
   status: NoteStatus;
   francesFeedback: string;
+  // Why we did it, plus a link to the Claude study behind the decision
+  reason: string;
+  studyLink: string;
   // Request ID on the Transfer Requests page, created when the note is Open
   transferRequestId: string;
   screenshots: NoteScreenshot[];

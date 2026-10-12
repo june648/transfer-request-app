@@ -22,9 +22,9 @@ const PRODUCTS_TABLE_ID = "tblLixRBZkc3IViAG";
 interface TableCache {
   transferRequests?: string;
   transferLineItems?: string;
-  // Bumped (asinNotes -> V2 -> V3) whenever fields are added, so browsers
+  // Bumped (asinNotes -> V2 -> V3 -> V4) whenever fields are added, so browsers
   // that cached the old table re-check for the new fields.
-  asinNotesV3?: string;
+  asinNotesV4?: string;
 }
 
 export function getConfig() {
@@ -605,16 +605,20 @@ const NOTE_STATUS_FIELD = {
 const NOTE_FEEDBACK_FIELD = { name: "Frances_Feedback", type: "multilineText" };
 const NOTE_TR_FIELD = { name: "TransferRequest_ID", type: "singleLineText" };
 const NOTE_SCREENSHOTS_FIELD = { name: "Screenshots", type: "multipleAttachments" };
+const NOTE_REASON_FIELD = { name: "Reason", type: "multilineText" };
+const NOTE_STUDY_LINK_FIELD = { name: "Study_Link", type: "url" };
 const NOTE_LATER_FIELDS = [
   NOTE_STATUS_FIELD,
   NOTE_FEEDBACK_FIELD,
   NOTE_TR_FIELD,
   NOTE_SCREENSHOTS_FIELD,
+  NOTE_REASON_FIELD,
+  NOTE_STUDY_LINK_FIELD,
 ];
 
 async function ensureNotesTable(): Promise<string> {
   const cache = getTableCache();
-  if (cache.asinNotesV3) return cache.asinNotesV3;
+  if (cache.asinNotesV4) return cache.asinNotesV4;
 
   const { baseId } = getConfig();
   const { tables } = await metaFetch(`bases/${baseId}/tables`);
@@ -658,7 +662,7 @@ async function ensureNotesTable(): Promise<string> {
   }
 
   const tableId = table.id || table.name;
-  setTableCache({ ...getTableCache(), asinNotesV3: tableId });
+  setTableCache({ ...getTableCache(), asinNotesV4: tableId });
   return tableId;
 }
 
@@ -674,6 +678,8 @@ function mapAsinNote(record: {
     note: (f["Note"] as string) || "",
     status: (f["Status"] as NoteStatus) || "Open",
     francesFeedback: (f["Frances_Feedback"] as string) || "",
+    reason: (f["Reason"] as string) || "",
+    studyLink: (f["Study_Link"] as string) || "",
     transferRequestId: (f["TransferRequest_ID"] as string) || "",
     screenshots: (
       (f["Screenshots"] as {
@@ -730,6 +736,8 @@ export async function createAsinNote(data: {
   productName: string;
   note: string;
   status: NoteStatus;
+  reason: string;
+  studyLink: string;
 }): Promise<AsinNote> {
   const { baseId } = getConfig();
   const notesTable = await ensureNotesTable();
@@ -742,6 +750,8 @@ export async function createAsinNote(data: {
         Product_Name: data.productName,
         Note: data.note,
         Status: data.status,
+        Reason: data.reason,
+        Study_Link: data.studyLink,
         Created_Date: new Date().toISOString(),
       },
     }),
@@ -757,6 +767,8 @@ export async function updateAsinNote(
     note: string;
     status: NoteStatus;
     francesFeedback: string;
+    reason: string;
+    studyLink: string;
     transferRequestId: string;
     // Screenshots to keep, by attachment id (anything left out is removed)
     screenshotIds: string[];
@@ -773,6 +785,9 @@ export async function updateAsinNote(
   if (fields.status !== undefined) airtableFields["Status"] = fields.status;
   if (fields.francesFeedback !== undefined)
     airtableFields["Frances_Feedback"] = fields.francesFeedback;
+  if (fields.reason !== undefined) airtableFields["Reason"] = fields.reason;
+  if (fields.studyLink !== undefined)
+    airtableFields["Study_Link"] = fields.studyLink;
   if (fields.transferRequestId !== undefined)
     airtableFields["TransferRequest_ID"] = fields.transferRequestId;
   if (fields.screenshotIds !== undefined)
